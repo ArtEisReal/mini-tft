@@ -1,0 +1,11 @@
+out/
+build/
+target/
+
+# IntelliJ IDEA
+.idea/workspace.xml
+.idea/shelf/
+.idea/httpRequests/
+
+# OS
+.DS_Store
