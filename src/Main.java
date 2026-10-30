@@ -1,40 +1,72 @@
+import java.rmi.RemoteException;
 import java.util.List;
 import java.util.Scanner;
 
 /**
- * Lokale Konsolen-Anwendung (Hotseat, beide Spieler an einer Konsole).
- * Spaeter: Client = dieser Teil, Server = GameEngine.
+ * Konsolen-Client für Mini-TFT.
+ * Verbindet sich per RMI zum Server und führt Befehle remote aus.
+ * 
+ * Verwendung:
+ *   java Main [host]
+ *   Standard: "localhost"
+ * 
+ * Befehle: buy <shop> | levelup | reroll | ready | quit
+ *   tofield <bench> <zeile> <spalte> | tobench <feld-pos> | move <feld-pos> <zeile> <spalte>
+ *   sell <feld-pos> | sellbench <bench>
  */
 public class Main implements GameListener {
 
     public static void main(String[] args) throws Exception {
-        Scanner in = new Scanner(System.in);
-        GameEngine engine = new GameEngine("Spieler1", "Spieler2");
-        engine.addListener(new Main());
-        engine.start();
+        // Server-Host aus Argumenten lesen, Standard: "localhost"
+        String host = args.length > 0 ? args[0] : "localhost";
 
+        // RMI-Client verbinden
+        RmiClient client = new RmiClient(host);
+        client.connect();
+        GameService service = client.getService();
+
+        // Listener registrieren (bidirektionale Kommunikation)
+        Main listener = new Main();
+        client.registerListener(listener);
+
+        Scanner in = new Scanner(System.in);
+        System.out.println("Verbunden mit Server: " + host);
         System.out.println("Mini-TFT. Befehle: buy <shop> | levelup | reroll | ready | quit");
         System.out.println("  tofield <bench> <zeile> <spalte> | tobench <feld-pos> | move <feld-pos> <zeile> <spalte>");
         System.out.println("  sell <feld-pos> | sellbench <bench>");
 
-        while (true) {
-            for (int pid = 0; pid < 2; pid++) {
-                GameStateDto st = engine.getState(pid);
-                while (!st.gameOver() && !st.self().ready()) {
-                    print(st);
-                    System.out.print("[" + st.self().name() + "] > ");
-                    if (!in.hasNextLine()) return;
-                    String line = in.nextLine().trim();
-                    if (line.equals("quit")) return;
-                    try {
-                        Command.parse(line).execute(engine, pid);
-                    } catch (GameRuleException | IllegalArgumentException e) {
-                        System.out.println("Fehler: " + e.getMessage());
+        try {
+            while (true) {
+                for (int pid = 0; pid < 2; pid++) {
+                    GameStateDto st = service.getState(pid);
+                    while (!st.gameOver() && !st.self().ready()) {
+                        print(st);
+                        System.out.print("[" + st.self().name() + "] > ");
+                        if (!in.hasNextLine()) {
+                            client.close();
+                            return;
+                        }
+                        String line = in.nextLine().trim();
+                        if (line.equals("quit")) {
+                            client.close();
+                            return;
+                        }
+                        try {
+                            Command.parse(line).execute(service, pid);
+                        } catch (GameRuleException | IllegalArgumentException e) {
+                            System.out.println("Fehler: " + e.getMessage());
+                        } catch (RemoteException e) {
+                            System.out.println("Verbindungsfehler: " + e.getMessage());
+                            client.close();
+                            return;
+                        }
+                        st = service.getState(pid);
                     }
-                    st = engine.getState(pid);
                 }
+                if (service.getState(0).gameOver()) break;
             }
-            if (engine.getState(0).gameOver()) break;
+        } finally {
+            client.close();
         }
     }
 
@@ -68,7 +100,7 @@ public class Main implements GameListener {
     }
 
     @Override
-    public void onCombatFrames(int round, List<CombatFrameDto> frames) {
+    public void onCombatFrames(int round, List<CombatFrameDto> frames) throws RemoteException {
         System.out.println("(Kampf mit " + frames.size() + " Ticks auf dem Brett)");
     }
 
@@ -81,7 +113,7 @@ public class Main implements GameListener {
     }
 
     @Override
-    public void onUnitCombined(int playerId, String unitName, int star) {
+    public void onUnitCombined(int playerId, String unitName, int star) throws RemoteException {
         System.out.println("*** Spieler" + (playerId + 1) + ": 3x " + unitName + " vereinigt -> "
                 + UnitDto.starLabel(unitName, star) + " ***");
     }

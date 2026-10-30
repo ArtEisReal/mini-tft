@@ -2,6 +2,7 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.rmi.RemoteException;
 import java.util.List;
 
 /**
@@ -20,7 +21,7 @@ public class SwingMain extends JFrame implements GameListener {
             new Color(142, 70, 184)};  // Kosten 4+
 
     private interface Action {
-        void run() throws GameRuleException;
+        void run() throws GameRuleException, RemoteException;
     }
 
     private final GameService service;
@@ -142,6 +143,8 @@ public class SwingMain extends JFrame implements GameListener {
             action.run();
         } catch (GameRuleException e) {
             msgLabel.setText(e.getMessage());
+        } catch (RemoteException e) {
+            msgLabel.setText("Verbindungsfehler: " + e.getMessage());
         }
         refresh();
     }
@@ -152,6 +155,9 @@ public class SwingMain extends JFrame implements GameListener {
             service.ready(current);
         } catch (GameRuleException e) {
             msgLabel.setText(e.getMessage());
+            return;
+        } catch (RemoteException e) {
+            msgLabel.setText("Verbindungsfehler: " + e.getMessage());
             return;
         }
         if (combatPlayback) return; // die Animation steuert den weiteren Ablauf
@@ -196,6 +202,8 @@ public class SwingMain extends JFrame implements GameListener {
             return service.getState(current);
         } catch (GameRuleException e) {
             throw new IllegalStateException(e);
+        } catch (RemoteException e) {
+            throw new IllegalStateException("Verbindungsfehler: " + e.getMessage(), e);
         }
     }
 
@@ -230,7 +238,7 @@ public class SwingMain extends JFrame implements GameListener {
     }
 
     @Override
-    public void onCombatFrames(int round, List<CombatFrameDto> frames) {
+    public void onCombatFrames(int round, List<CombatFrameDto> frames) throws RemoteException {
         combatPlayback = true;
         statusLabel.setText("Kampf wird ausgetragen ...");
         boardPanel.playFrames(frames, this::afterCombat);
@@ -246,7 +254,7 @@ public class SwingMain extends JFrame implements GameListener {
     }
 
     @Override
-    public void onUnitCombined(int playerId, String unitName, int star) {
+    public void onUnitCombined(int playerId, String unitName, int star) throws RemoteException {
         logArea.append("*** " + NAMES[playerId] + ": 3x " + unitName + " vereinigt -> "
                 + UnitDto.starLabel(unitName, star) + " ***\n");
     }
@@ -332,12 +340,41 @@ public class SwingMain extends JFrame implements GameListener {
     }
 
     public static void main(String[] args) {
+        // Server-Host aus Argumenten lesen, Standard: "localhost"
+        String host = args.length > 0 ? args[0] : "localhost";
+
         SwingUtilities.invokeLater(() -> {
-            GameEngine engine = new GameEngine(NAMES[0], NAMES[1]);
-            SwingMain ui = new SwingMain(engine);
-            engine.addListener(ui);
-            engine.start();
-            ui.setVisible(true);
+            try {
+                // RMI-Client verbinden
+                RmiClient client = new RmiClient(host);
+                client.connect();
+                GameService service = client.getService();
+
+                // GUI erstellen
+                SwingMain ui = new SwingMain(service);
+
+                // Listener beim Server registrieren (bidirektionale Kommunikation)
+                client.registerListener(ui);
+
+                // Spiel starten (Server hat bereits start() aufgerufen, UI nur aktualisieren)
+                ui.refresh();
+                ui.setVisible(true);
+
+                // Bei Fenster-Schließung: Client trennen
+                ui.addWindowListener(new java.awt.event.WindowAdapter() {
+                    @Override
+                    public void windowClosing(java.awt.event.WindowEvent e) {
+                        client.close();
+                    }
+                });
+
+            } catch (Exception e) {
+                JOptionPane.showMessageDialog(null,
+                        "Fehler beim Verbinden mit dem Server:\n" + e.getMessage() + "\n\n"
+                        + "Stelle sicher, dass RmiServer läuft:\njava RmiServer",
+                        "Verbindungsfehler", JOptionPane.ERROR_MESSAGE);
+                e.printStackTrace();
+            }
         });
     }
 }

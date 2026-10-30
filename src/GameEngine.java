@@ -1,15 +1,19 @@
+import java.rmi.RemoteException;
+import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 /**
  * Spiellogik. Implementiert GameService (Design Pattern: Facade).
- * Später läuft diese Klasse auf dem Server; der Client sieht nur GameService + DTOs.
- *
+ * Läuft auf dem Server; der Client sieht nur GameService + DTOs.
+ * 
+ * RMI-Anpassung: Erbt von UnicastRemoteObject für Remote-Zugriff.
+ * 
  * Einheiten: Kauf -> Bench -> per toField aufs Feld (begrenzt durch das Level).
  * 3 gleiche Einheiten (Bench + Feld zusammen) verschmelzen zur naechsten Sternstufe.
  */
-public class GameEngine implements GameService {
+public class GameEngine extends UnicastRemoteObject implements GameService {
     /** Brettgroesse und Bretthalfte: Spieler 0 besetzt die oberen Zeilen, Spieler 1 die unteren. */
     static final int BOARD_SIZE = 9;
     static final int PLAYER_ROWS = 4;
@@ -29,12 +33,14 @@ public class GameEngine implements GameService {
     private boolean gameOver = false;
     private String winnerName = null;
 
-    public GameEngine(String name0, String name1) {
+    /** Erstellt den RMI-Stub automatisch via UnicastRemoteObject. */
+    protected GameEngine(String name0, String name1) throws RemoteException {
         this(name0, name1, new UnitFactory(new Random()));
     }
 
     /** Mit eigener Factory (z.B. fuer deterministische Tests). */
-    public GameEngine(String name0, String name1, UnitFactory factory) {
+    protected GameEngine(String name0, String name1, UnitFactory factory) throws RemoteException {
+        super();
         this.factory = factory;
         players = new Player[] {new Player(0, name0), new Player(1, name1)};
     }
@@ -44,14 +50,14 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized void addListener(GameListener listener) {
+    public synchronized void addListener(GameListener listener) throws RemoteException {
         listeners.add(listener);
     }
 
     // ---------- Befehle (vom Client aufgerufen) ----------
 
     @Override
-    public synchronized PlayerDto buy(int playerId, int slot) throws GameRuleException {
+    public synchronized PlayerDto buy(int playerId, int slot) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         int idx = slot - 1;
         if (idx < 0 || idx >= p.shop.size()) throw new GameRuleException("Ungueltiger Shop-Slot: " + slot);
@@ -65,7 +71,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized PlayerDto sell(int playerId, int index) throws GameRuleException {
+    public synchronized PlayerDto sell(int playerId, int index) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
         p.gold += u.sellValue();
@@ -74,7 +80,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized PlayerDto sellBench(int playerId, int slot) throws GameRuleException {
+    public synchronized PlayerDto sellBench(int playerId, int slot) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         Unit u = benchUnit(p, slot);
         p.gold += u.sellValue();
@@ -83,7 +89,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized PlayerDto move(int playerId, int index, int row, int col) throws GameRuleException {
+    public synchronized PlayerDto move(int playerId, int index, int row, int col) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
         checkOwnHalf(p, row, col);
@@ -98,7 +104,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized PlayerDto toField(int playerId, int benchSlot, int row, int col) throws GameRuleException {
+    public synchronized PlayerDto toField(int playerId, int benchSlot, int row, int col) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         Unit u = benchUnit(p, benchSlot);
         checkOwnHalf(p, row, col);
@@ -120,7 +126,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized PlayerDto toBench(int playerId, int index) throws GameRuleException {
+    public synchronized PlayerDto toBench(int playerId, int index) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
         if (p.bench.size() >= BENCH_SIZE) throw new GameRuleException("Bench ist voll (" + BENCH_SIZE + ")");
@@ -132,7 +138,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized PlayerDto levelUp(int playerId) throws GameRuleException {
+    public synchronized PlayerDto levelUp(int playerId) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         if (p.level >= MAX_LEVEL) throw new GameRuleException("Maximales Level erreicht (" + MAX_LEVEL + ")");
         if (p.gold < LEVEL_COST) throw new GameRuleException("Zu wenig Gold zum Leveln (" + LEVEL_COST + ")");
@@ -142,7 +148,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized PlayerDto reroll(int playerId) throws GameRuleException {
+    public synchronized PlayerDto reroll(int playerId) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         if (p.gold < REROLL_COST) throw new GameRuleException("Zu wenig Gold fuer Reroll (" + REROLL_COST + ")");
         p.gold -= REROLL_COST;
@@ -151,7 +157,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized PlayerDto ready(int playerId) throws GameRuleException {
+    public synchronized PlayerDto ready(int playerId) throws GameRuleException, RemoteException {
         Player p = activePlayer(playerId);
         p.ready = true;
         if (players[0].ready && players[1].ready) resolveCombat();
@@ -159,7 +165,7 @@ public class GameEngine implements GameService {
     }
 
     @Override
-    public synchronized GameStateDto getState(int playerId) throws GameRuleException {
+    public synchronized GameStateDto getState(int playerId) throws GameRuleException, RemoteException {
         Player p = player(playerId);
         Player opp = players[1 - playerId];
         return new GameStateDto(round, p.toDto(false), opp.toDto(true), gameOver, winnerName);
@@ -244,7 +250,12 @@ public class GameEngine implements GameService {
                         removeAnywhere(p, b);
                         removeAnywhere(p, c);
                         merged = true;
-                        for (GameListener l : listeners) l.onUnitCombined(p.id, a.name, a.star);
+                        for (GameListener l : listeners) {
+                            try { l.onUnitCombined(p.id, a.name, a.star); }
+                            catch (RemoteException e) {
+                                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                            }
+                        }
                         break outer;
                     }
                 }
@@ -263,7 +274,12 @@ public class GameEngine implements GameService {
             p.ready = false;
             refillShop(p);
         }
-        for (GameListener l : listeners) l.onRoundStarted(round);
+        for (GameListener l : listeners) {
+            try { l.onRoundStarted(round); }
+            catch (RemoteException e) {
+                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+            }
+        }
     }
 
     private void resolveCombat() {
@@ -295,9 +311,19 @@ public class GameEngine implements GameService {
         }
 
         // Animation zuerst (Richtung 2: Callback mit den Frames), dann das Ergebnis
-        for (GameListener l : listeners) l.onCombatFrames(round, frames);
+        for (GameListener l : listeners) {
+            try { l.onCombatFrames(round, frames); }
+            catch (RemoteException e) {
+                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+            }
+        }
         CombatResultDto result = new CombatResultDto(round, log, winner, damage);
-        for (GameListener l : listeners) l.onCombatFinished(result);
+        for (GameListener l : listeners) {
+            try { l.onCombatFinished(result); }
+            catch (RemoteException e) {
+                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+            }
+        }
 
         for (Player p : players) {
             if (p.hp <= 0) {
@@ -306,7 +332,12 @@ public class GameEngine implements GameService {
             }
         }
         if (gameOver) {
-            for (GameListener l : listeners) l.onGameOver(winnerName);
+            for (GameListener l : listeners) {
+                try { l.onGameOver(winnerName); }
+                catch (RemoteException e) {
+                    System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                }
+            }
         } else {
             startRound();
         }
