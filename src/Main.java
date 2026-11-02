@@ -1,6 +1,8 @@
 import java.rmi.RemoteException;
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.util.List;
 import java.util.Scanner;
+// AI-GENERATED-END
 
 /**
  * Konsolen-Client für Mini-TFT.
@@ -14,9 +16,11 @@ import java.util.Scanner;
  *   tofield <bench> <zeile> <spalte> | tobench <feld-pos> | move <feld-pos> <zeile> <spalte>
  *   sell <feld-pos> | sellbench <bench>
  */
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 public class Main implements GameListener {
 
     public static void main(String[] args) throws Exception {
+    // AI-GENERATED-END
         // AI-GENERATED-START: Server-Host-Resolution (Argument / minitft.server / localhost) + Fehlerhinweis - 2026-11-02 12:41 CET
         // Server-Host: erst Argument, sonst minitft.server/MINITFT_SERVER, sonst "localhost"
         String host = RmiConfig.serverHost(args);
@@ -39,9 +43,11 @@ public class Main implements GameListener {
 
         Scanner in = new Scanner(System.in);
         System.out.println("Verbunden mit Server: " + host);
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         System.out.println("Mini-TFT. Befehle: buy <shop> | levelup | reroll | ready | quit");
         System.out.println("  tofield <bench> <zeile> <spalte> | tobench <feld-pos> | move <feld-pos> <zeile> <spalte>");
         System.out.println("  sell <feld-pos> | sellbench <bench>");
+        // AI-GENERATED-END
         // AI-GENERATED-START: JSON-Kommandozeile fuer das menschenlesbare Nachrichtenformat - 2026-11-02 14:10 CET
         System.out.println("  state                  -> Spielstand als JSON vom Server holen (Richtung Server->Client)");
         System.out.println("  json <befehl ...>      -> Befehl als JSON senden, Antwort als JSON empfangen (Client->Server)");
@@ -123,6 +129,7 @@ public class Main implements GameListener {
             }
         } finally {
             client.close();
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         }
     }
 
@@ -156,23 +163,29 @@ public class Main implements GameListener {
     }
 
     @Override
+    // AI-GENERATED-END
     public void onCombatFrames(int round, List<CombatFrameDto> frames) throws RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         System.out.println("(Kampf mit " + frames.size() + " Ticks auf dem Brett)");
     }
 
     @Override
     public void onCombatFinished(CombatResultDto r) {
         System.out.println("\n##### KAMPF Runde " + r.round() + " #####");
+        // AI-GENERATED-END
         // AI-GENERATED-START: empfangenes DTO clientseitig als JSON marshallen (Anzeige) - 2026-11-02 14:10 CET
         System.out.println(JsonMapper.write(JsonMapper.toJson(r), true));
         // AI-GENERATED-END
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         r.log().forEach(System.out::println);
         System.out.println(r.winnerId() < 0 ? "Unentschieden!" : "Sieger: Spieler" + (r.winnerId() + 1)
                 + " (Gegner verliert " + r.damage() + " HP)");
     }
 
     @Override
+    // AI-GENERATED-END
     public void onUnitCombined(int playerId, String unitName, int star) throws RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         System.out.println("*** Spieler" + (playerId + 1) + ": 3x " + unitName + " vereinigt -> "
                 + UnitDto.starLabel(unitName, star) + " ***");
     }
@@ -182,3 +195,4 @@ public class Main implements GameListener {
         System.out.println("\n*** SPIEL VORBEI - Gewinner: " + winnerName + " ***");
     }
 }
+// AI-GENERATED-END

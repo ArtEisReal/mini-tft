@@ -1,8 +1,10 @@
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+// AI-GENERATED-END
 
 /**
  * Spiellogik. Implementiert GameService (Design Pattern: Facade).
@@ -14,6 +16,7 @@ import java.util.Random;
  * 3 gleiche Einheiten (Bench + Feld zusammen) verschmelzen zur naechsten Sternstufe.
  */
 public class GameEngine extends UnicastRemoteObject implements GameService {
+    // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     /** Brettgroesse und Bretthalfte: Spieler 0 besetzt die oberen Zeilen, Spieler 1 die unteren. */
     static final int BOARD_SIZE = 9;
     static final int PLAYER_ROWS = 4;
@@ -32,6 +35,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     private int round = 0;
     private boolean gameOver = false;
     private String winnerName = null;
+    // AI-GENERATED-END
 
     // AI-GENERATED-START: Konstruktoren - fester Export-Port (0 = anonym) als neue Variante, Bestandskonstruktoren delegieren - 2026-11-02 12:41 CET
     /** Erstellt den RMI-Stub auf einem anonymen Port. */
@@ -61,23 +65,30 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
     // AI-GENERATED-END
 
+    // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     public synchronized void start() {
         startRound();
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized void addListener(GameListener listener) throws RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         listeners.add(listener);
+        // AI-GENERATED-END
         // AI-GENERATED-START: Feedback, wenn sich ein Client registriert - 2026-11-02 13:02 CET
         System.out.println("Client verbunden (Listener registriert) - insgesamt "
                 + listeners.size() + " Listener.");
         // AI-GENERATED-END
+    // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     }
 
     // ---------- Befehle (vom Client aufgerufen) ----------
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto buy(int playerId, int slot) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         int idx = slot - 1;
         if (idx < 0 || idx >= p.shop.size()) throw new GameRuleException("Ungueltiger Shop-Slot: " + slot);
@@ -91,7 +102,9 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto sell(int playerId, int index) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
         p.gold += u.sellValue();
@@ -100,7 +113,9 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto sellBench(int playerId, int slot) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = benchUnit(p, slot);
         p.gold += u.sellValue();
@@ -109,7 +124,9 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto move(int playerId, int index, int row, int col) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
         checkOwnHalf(p, row, col);
@@ -124,7 +141,9 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto toField(int playerId, int benchSlot, int row, int col) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = benchUnit(p, benchSlot);
         checkOwnHalf(p, row, col);
@@ -146,7 +165,9 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto toBench(int playerId, int index) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
         if (p.bench.size() >= BENCH_SIZE) throw new GameRuleException("Bench ist voll (" + BENCH_SIZE + ")");
@@ -158,7 +179,9 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto levelUp(int playerId) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         if (p.level >= MAX_LEVEL) throw new GameRuleException("Maximales Level erreicht (" + MAX_LEVEL + ")");
         if (p.gold < LEVEL_COST) throw new GameRuleException("Zu wenig Gold zum Leveln (" + LEVEL_COST + ")");
@@ -168,7 +191,9 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto reroll(int playerId) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         if (p.gold < REROLL_COST) throw new GameRuleException("Zu wenig Gold fuer Reroll (" + REROLL_COST + ")");
         p.gold -= REROLL_COST;
@@ -177,7 +202,9 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized PlayerDto ready(int playerId) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         p.ready = true;
         if (players[0].ready && players[1].ready) resolveCombat();
@@ -185,11 +212,14 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     @Override
+    // AI-GENERATED-END
     public synchronized GameStateDto getState(int playerId) throws GameRuleException, RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = player(playerId);
         Player opp = players[1 - playerId];
         return new GameStateDto(round, p.toDto(false), opp.toDto(true), gameOver, winnerName);
     }
+    // AI-GENERATED-END
 
     // AI-GENERATED-START: Aufgabe 6 - Benchmark-Aufruf (identischer Code lokal und remote) - 2026-11-02 14:40 CET
     @Override
@@ -224,6 +254,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
     // AI-GENERATED-END
 
+    // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     // ---------- interne Logik ----------
 
     private Player player(int id) throws GameRuleException {
@@ -303,12 +334,14 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
                         removeAnywhere(p, b);
                         removeAnywhere(p, c);
                         merged = true;
+                        // AI-GENERATED-END
                         for (GameListener l : listeners) {
                             try { l.onUnitCombined(p.id, a.name, a.star); }
                             catch (RemoteException e) {
                                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
                             }
                         }
+                        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
                         break outer;
                     }
                 }
@@ -327,12 +360,14 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
             p.ready = false;
             refillShop(p);
         }
+        // AI-GENERATED-END
         for (GameListener l : listeners) {
             try { l.onRoundStarted(round); }
             catch (RemoteException e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
+    // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     }
 
     private void resolveCombat() {
@@ -364,13 +399,16 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
         }
 
         // Animation zuerst (Richtung 2: Callback mit den Frames), dann das Ergebnis
+        // AI-GENERATED-END
         for (GameListener l : listeners) {
             try { l.onCombatFrames(round, frames); }
             catch (RemoteException e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         CombatResultDto result = new CombatResultDto(round, log, winner, damage);
+        // AI-GENERATED-END
         for (GameListener l : listeners) {
             try { l.onCombatFinished(result); }
             catch (RemoteException e) {
@@ -378,6 +416,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
             }
         }
 
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         for (Player p : players) {
             if (p.hp <= 0) {
                 gameOver = true;
@@ -385,14 +424,17 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
             }
         }
         if (gameOver) {
+        // AI-GENERATED-END
             for (GameListener l : listeners) {
                 try { l.onGameOver(winnerName); }
                 catch (RemoteException e) {
                     System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
                 }
             }
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         } else {
             startRound();
         }
     }
 }
+// AI-GENERATED-END

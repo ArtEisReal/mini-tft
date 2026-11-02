@@ -1,3 +1,4 @@
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.io.Serializable;
 
 /** DTO: Einheit (wird in beide Richtungen übertragen). row/col = Position auf dem Brett, -1 = keine. */
@@ -14,3 +15,4 @@ public record UnitDto(int id, String name, int cost, int hp, int attack, int ran
         return star > 1 ? "★".repeat(star - 1) + " " + name : name;
     }
 }
+// AI-GENERATED-END

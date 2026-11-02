@@ -1,8 +1,11 @@
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+// AI-GENERATED-END
 import java.rmi.RemoteException;
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.util.List;
 
 /**
@@ -21,7 +24,9 @@ public class SwingMain extends JFrame implements GameListener {
             new Color(142, 70, 184)};  // Kosten 4+
 
     private interface Action {
+    // AI-GENERATED-END
         void run() throws GameRuleException, RemoteException;
+    // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     }
 
     private final GameService service;
@@ -143,8 +148,10 @@ public class SwingMain extends JFrame implements GameListener {
             action.run();
         } catch (GameRuleException e) {
             msgLabel.setText(e.getMessage());
+            // AI-GENERATED-END
         } catch (RemoteException e) {
             msgLabel.setText("Verbindungsfehler: " + e.getMessage());
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         }
         refresh();
     }
@@ -156,9 +163,11 @@ public class SwingMain extends JFrame implements GameListener {
         } catch (GameRuleException e) {
             msgLabel.setText(e.getMessage());
             return;
+            // AI-GENERATED-END
         } catch (RemoteException e) {
             msgLabel.setText("Verbindungsfehler: " + e.getMessage());
             return;
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         }
         if (combatPlayback) return; // die Animation steuert den weiteren Ablauf
         GameStateDto st = state();
@@ -202,8 +211,10 @@ public class SwingMain extends JFrame implements GameListener {
             return service.getState(current);
         } catch (GameRuleException e) {
             throw new IllegalStateException(e);
+            // AI-GENERATED-END
         } catch (RemoteException e) {
             throw new IllegalStateException("Verbindungsfehler: " + e.getMessage(), e);
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         }
     }
 
@@ -238,7 +249,9 @@ public class SwingMain extends JFrame implements GameListener {
     }
 
     @Override
+    // AI-GENERATED-END
     public void onCombatFrames(int round, List<CombatFrameDto> frames) throws RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         combatPlayback = true;
         statusLabel.setText("Kampf wird ausgetragen ...");
         boardPanel.playFrames(frames, this::afterCombat);
@@ -254,7 +267,9 @@ public class SwingMain extends JFrame implements GameListener {
     }
 
     @Override
+    // AI-GENERATED-END
     public void onUnitCombined(int playerId, String unitName, int star) throws RemoteException {
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         logArea.append("*** " + NAMES[playerId] + ": 3x " + unitName + " vereinigt -> "
                 + UnitDto.starLabel(unitName, star) + " ***\n");
     }
@@ -340,12 +355,15 @@ public class SwingMain extends JFrame implements GameListener {
     }
 
     public static void main(String[] args) {
+    // AI-GENERATED-END
         // AI-GENERATED-START: Server-Host-Resolution (Argument / minitft.server / localhost) - 2026-11-02 12:41 CET
         // Server-Host: erst Argument, sonst minitft.server/MINITFT_SERVER, sonst "localhost"
         String host = RmiConfig.serverHost(args);
         // AI-GENERATED-END
 
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         SwingUtilities.invokeLater(() -> {
+        // AI-GENERATED-END
             try {
                 // RMI-Client verbinden
                 RmiClient client = new RmiClient(host);

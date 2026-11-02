@@ -6,9 +6,12 @@ import java.rmi.RemoteException;
  * 
  * RMI-Anpassung: execute wirft auch RemoteException fuer Remote-Aufrufe.
  */
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 public interface Command {
+// AI-GENERATED-END
     PlayerDto execute(GameService service, int playerId) throws GameRuleException, RemoteException;
 
+    // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     /** Wandelt eine Eingabezeile in ein Command um. */
     static Command parse(String line) {
         String[] parts = line.trim().toLowerCase().split("\\s+");
@@ -50,3 +53,4 @@ public interface Command {
         }
     }
 }
+// AI-GENERATED-END

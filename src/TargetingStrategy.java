@@ -1,3 +1,4 @@
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.util.Comparator;
 import java.util.List;
 
@@ -13,3 +14,4 @@ public interface TargetingStrategy {
         return enemies -> enemies.isEmpty() ? null : enemies.get(0);
     }
 }
+// AI-GENERATED-END

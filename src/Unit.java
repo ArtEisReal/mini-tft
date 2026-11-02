@@ -1,3 +1,4 @@
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 /** Domänenklasse: eine Kampfeinheit. Wird bei der Verteilung über UnitDto übertragen. */
 public class Unit {
     /**
@@ -66,3 +67,4 @@ public class Unit {
         return star <= 1 ? 1 : star == 2 ? 3 : 9;
     }
 }
+// AI-GENERATED-END

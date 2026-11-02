@@ -1,3 +1,4 @@
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,3 +30,4 @@ public class Player {
                 hideShop ? List.of() : shop.stream().map(Unit::toDto).toList());
     }
 }
+// AI-GENERATED-END

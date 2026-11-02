@@ -1,3 +1,4 @@
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.MouseAdapter;
@@ -433,3 +434,4 @@ public class BoardPanel extends JPanel {
         g.drawString(text, cx - fm.stringWidth(text) / 2, cy + (fm.getAscent() - fm.getDescent()) / 2);
     }
 }
+// AI-GENERATED-END

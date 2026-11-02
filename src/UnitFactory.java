@@ -1,3 +1,4 @@
+// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,3 +29,4 @@ public class UnitFactory {
         return new Unit(NEXT_ID.getAndIncrement(), t.name(), t.cost(), t.hp(), t.attack(), t.range());
     }
 }
+// AI-GENERATED-END
