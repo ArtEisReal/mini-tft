@@ -33,17 +33,33 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     private boolean gameOver = false;
     private String winnerName = null;
 
-    /** Erstellt den RMI-Stub automatisch via UnicastRemoteObject. */
+    // AI-GENERATED-START: Konstruktoren - fester Export-Port (0 = anonym) als neue Variante, Bestandskonstruktoren delegieren - 2026-11-02 12:41 CET
+    /** Erstellt den RMI-Stub auf einem anonymen Port. */
     protected GameEngine(String name0, String name1) throws RemoteException {
-        this(name0, name1, new UnitFactory(new Random()));
+        this(name0, name1, new UnitFactory(new Random()), 0);
+    }
+
+    /**
+     * Erstellt den RMI-Stub auf einem festen Port (0 = anonymer Port).
+     * Fester Port = nur eine Firewall-Regel noetig, wenn der Server
+     * auf einem anderen Rechner laeuft.
+     */
+    protected GameEngine(String name0, String name1, int port) throws RemoteException {
+        this(name0, name1, new UnitFactory(new Random()), port);
     }
 
     /** Mit eigener Factory (z.B. fuer deterministische Tests). */
     protected GameEngine(String name0, String name1, UnitFactory factory) throws RemoteException {
-        super();
+        this(name0, name1, factory, 0);
+    }
+
+    /** Mit eigener Factory und festem Port. */
+    protected GameEngine(String name0, String name1, UnitFactory factory, int port) throws RemoteException {
+        super(port);
         this.factory = factory;
         players = new Player[] {new Player(0, name0), new Player(1, name1)};
     }
+    // AI-GENERATED-END
 
     public synchronized void start() {
         startRound();

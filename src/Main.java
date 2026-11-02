@@ -17,12 +17,20 @@ import java.util.Scanner;
 public class Main implements GameListener {
 
     public static void main(String[] args) throws Exception {
-        // Server-Host aus Argumenten lesen, Standard: "localhost"
-        String host = args.length > 0 ? args[0] : "localhost";
+        // AI-GENERATED-START: Server-Host-Resolution (Argument / minitft.server / localhost) + Fehlerhinweis - 2026-11-02 12:41 CET
+        // Server-Host: erst Argument, sonst minitft.server/MINITFT_SERVER, sonst "localhost"
+        String host = RmiConfig.serverHost(args);
 
         // RMI-Client verbinden
         RmiClient client = new RmiClient(host);
-        client.connect();
+        try {
+            client.connect();
+        } catch (java.rmi.ConnectException e) {
+            System.err.println("Server nicht erreichbar unter " + host + ":" + RmiConfig.REGISTRY_PORT + ".");
+            System.err.println("Starte zuerst den Server:  java -Dminitft.host=<eigene-IP> RmiServer");
+            return;
+        }
+        // AI-GENERATED-END
         GameService service = client.getService();
 
         // Listener registrieren (bidirektionale Kommunikation)

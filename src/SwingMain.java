@@ -340,8 +340,10 @@ public class SwingMain extends JFrame implements GameListener {
     }
 
     public static void main(String[] args) {
-        // Server-Host aus Argumenten lesen, Standard: "localhost"
-        String host = args.length > 0 ? args[0] : "localhost";
+        // AI-GENERATED-START: Server-Host-Resolution (Argument / minitft.server / localhost) - 2026-11-02 12:41 CET
+        // Server-Host: erst Argument, sonst minitft.server/MINITFT_SERVER, sonst "localhost"
+        String host = RmiConfig.serverHost(args);
+        // AI-GENERATED-END
 
         SwingUtilities.invokeLater(() -> {
             try {
@@ -369,10 +371,14 @@ public class SwingMain extends JFrame implements GameListener {
                 });
 
             } catch (Exception e) {
+                // AI-GENERATED-START: Fehlerdialog um Server-Host und Startbefehl ergänzt - 2026-11-02 12:41 CET
                 JOptionPane.showMessageDialog(null,
                         "Fehler beim Verbinden mit dem Server:\n" + e.getMessage() + "\n\n"
-                        + "Stelle sicher, dass RmiServer läuft:\njava RmiServer",
+                        + "Server: " + host + ":" + RmiConfig.REGISTRY_PORT + "\n"
+                        + "Stelle sicher, dass RmiServer läuft:\n"
+                        + "java -Dminitft.host=<eigene-IP> RmiServer",
                         "Verbindungsfehler", JOptionPane.ERROR_MESSAGE);
+                // AI-GENERATED-END
                 e.printStackTrace();
             }
         });
