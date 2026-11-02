@@ -2,7 +2,7 @@
 # Mini-TFT
 
 Auto-Battler (TFT-Style) in Java. Ein Server (`RmiServer`) hält den Spielzustand,
-Clients (`SwingMain` für die GUI, `Main` für die Konsole) verbinden sich per RMI.
+der Client (`SwingMain`, Swing-GUI) verbindet sich per RMI.
 
 ## Bauen
 
@@ -18,8 +18,6 @@ Windows ist statt `:` ein `;` zu verwenden (`out;lib/javax.json-1.1.4.jar`).
 ```bash
 java -cp out:lib/javax.json-1.1.4.jar RmiServer                 # Terminal 1
 java -cp out:lib/javax.json-1.1.4.jar SwingMain                 # Terminal 2 – beide spielen abwechselnd
-# oder Konsole:
-java -cp out:lib/javax.json-1.1.4.jar Main
 ```
 
 ## Server auf einem anderen Rechner (z.B. VPN)
@@ -103,17 +101,32 @@ eingebunden (steht in `mini-tft.iml`).
 |----------|----------------------------|-------------|---------------|
 | Client → Server | `String executeJson(String commandJson)` | `JsonMapper.commandJson()` (Objekt → JSON) | `JsonMapper.parseCommand()` via **JsonParser** (ereignisbasiert) |
 | Server → Client | `String getStateJson(int playerId)` | `JsonMapper.toJson(GameStateDto)` | `JsonMapper.toGameState()` / `toPlayer()` / `toUnit()` |
-| Server → Client (Callback) | `GameListener.onCombatFinished(CombatResultDto)` | RMI-Objekt, wird clientseitig als JSON dargestellt | `JsonMapper.toCombatResult()` |
+| `CombatFrameDto` (Animation) | `GameListener.onCombatFrames(...)` | RMI-Objekt | `JsonMapper.toCombatFrame()` / `toUnitState()` / `toCombatEvent()` |
 
-Beispiele (im Konsolen-Client `Main`):
+Alle drei Ansichten liegen im Menü der GUI:
 
+| Menü | Eintrag | Zeigt |
+|---|---|---|
+| *Ansicht* | **Spielstand als JSON ...** | `getStateJson(current)` – Server marshallt den `GameStateDto` |
+| *Ansicht* | **Befehl als JSON senden ...** | `executeJson(...)` – Request **und** Response als JSON |
+| *Ansicht* | **Kampf-Frames als JSON ...** | `CombatFrameDto`/`UnitStateDto`/`CombatEventDto` des letzten Kampfes |
+| *Extras* | **Benchmark (lokal vs. RPC) ...** | Messung aus Aufgabe 6 |
+
+Beispiel „Befehl als JSON senden" mit `buy 1`:
+
+```json
+--> Request  (Marshalling auf dem Client)
+{ "cmd": "buy", "playerId": 0, "args": [ 1 ] }
+
+<-- Response (Marshalling auf dem Server)
+{ "id": 0, "name": "Alice", "hp": 30, "gold": 8, ... }
+
+Unmarshalling auf dem Client: Alice | HP 30 | Gold 8 | Level 2
 ```
-state            ->  Spielstand als JSON vom Server (Richtung Server -> Client)
-json buy 1       ->  --> {"cmd":"buy","playerId":0,"args":[1]}
-                     <-- { ... PlayerDto als JSON ... }
-                     Unmarshalling auf dem Client: Alice | HP 30 | Gold 8 | ...
-json buy         ->  Fehler (als Exception uebertragen): JSON-Befehl "buy" braucht Argument 1
-```
+
+Bei fehlendem Argument (`json` = `buy`) erscheint die Server-Meldung
+`JSON-Befehl "buy" braucht Argument 1` – die `GameRuleException` wird über RMI
+übertragen (Aufgabe 7).
 
 Der Transport bleibt RMI/JRMP; das Nutzformat der beiden JSON-Methoden ist
 String-JSON, d.h. auf dem Draht liegt ein menschenlesbarer Text. Fehlt ein
@@ -134,9 +147,7 @@ einmal als direkten Aufruf im selben JVM (Objekt-Referenz, kein Stub), einmal
 # eigenständig gegen einen Rechner:
 java -cp out:lib/javax.json-1.1.4.jar RpcBenchmark <SERVER-IP> 500
 
-# oder im Konsolen-Client:
-bench            # 500 Messungen je Methode
-bench 200        # eigene Anzahl
+# oder in der GUI: Menü "Extras" -> "Benchmark (lokal vs. RPC) ..." (Anzahl eingeben)
 ```
 
 Messreihen mit steigender Nutzlast:
@@ -160,12 +171,16 @@ Für die Abnahme zusätzlich gegen die **IP des zweiten Rechners** messen
 Protokoll-/Serialisierungsaufwand hinzu. Die Zahlen in der Konsole als
 Tabelle ausgeben und Werte vor dem Vorführen protokollieren.
 
-## Spiel (Konsolen-Client)
+## Spiel (GUI)
 
-```
-buy <shop> | levelup | reroll | ready | quit
-tofield <bench> <zeile> <spalte> | tobench <feld-pos> | move <feld-pos> <zeile> <spalte>
-sell <feld-pos> | sellbench <bench>
-state | json <befehl ...> | bench [n]   # JSON-Varianten und Benchmark, siehe oben
-```
+Bedienung mit der Maus im `SwingMain`-Fenster:
+
+- **Shop-Klick** = kaufen (Einheit landet auf der Bench)
+- **Bench anklicken, dann Brettzelle** = aufs Feld ziehen
+- **Feld-Einheit anklicken, dann Zielzelle** = verschieben/tauschen
+- **Rechtsklick** auf eigene Einheit = verkaufen
+- **Reroll** / **Level up** / **Fertig** als Buttons; zwischen den Spielern
+  liegt ein Sichtschutz („Weiter")
+
+Zusätzlich im Menü: JSON-Ansichten und Benchmark (siehe oben).
 <!-- AI-GENERATED-END -->

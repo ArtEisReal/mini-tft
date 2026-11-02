@@ -30,7 +30,11 @@ public class SwingMain extends JFrame implements GameListener {
     }
 
     private final GameService service;
+    private final String serverHost;
     private int current = 0;
+    // AI-GENERATED-START: letzte Kampf-Frames fuer die JSON-Ansicht merken - 2026-11-02 16:05 CET
+    private List<CombatFrameDto> lastFrames;
+    // AI-GENERATED-END
     private boolean combatPlayback = false;
 
     private final JLabel statusLabel = new JLabel(" ");
@@ -44,9 +48,10 @@ public class SwingMain extends JFrame implements GameListener {
     private final JPanel center = new JPanel(cards);
     private final JLabel coverLabel = new JLabel("", SwingConstants.CENTER);
 
-    public SwingMain(GameService service) {
+    public SwingMain(GameService service, String serverHost) {
         super("Mini-TFT");
         this.service = service;
+        this.serverHost = serverHost;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
         ((JComponent) getContentPane()).setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -136,6 +141,7 @@ public class SwingMain extends JFrame implements GameListener {
 
         setSize(1250, 780);
         setLocationRelativeTo(null);
+        setJMenuBar(buildMenuBar());
         showCover();
     }
 
@@ -241,6 +247,135 @@ public class SwingMain extends JFrame implements GameListener {
         shopPanel.repaint();
     }
 
+    // ---------- JSON-Nachrichtenformat + Benchmark (Menue) ----------
+    // AI-GENERATED-START: JSON-Ansicht, JSON-Befehl und Benchmark in der GUI - 2026-11-02 16:05 CET
+
+    private JMenuBar buildMenuBar() {
+        JMenuBar bar = new JMenuBar();
+
+        JMenu view = new JMenu("Ansicht");
+        JMenuItem jsonState = new JMenuItem("Spielstand als JSON ...");
+        jsonState.setToolTipText("getStateJson(current) - Server marshallt, Client zeigt den Rohtext");
+        jsonState.addActionListener(e -> showJsonState());
+        view.add(jsonState);
+
+        JMenuItem jsonCommand = new JMenuItem("Befehl als JSON senden ...");
+        jsonCommand.setToolTipText("executeJson(...) - Befehl als JSON zum Server, Antwort als JSON zurueck");
+        jsonCommand.addActionListener(e -> sendJsonCommand());
+        view.add(jsonCommand);
+
+        JMenuItem jsonFrames = new JMenuItem("Kampf-Frames als JSON ...");
+        jsonFrames.setToolTipText("CombatFrameDto/UnitStateDto/CombatEventDto als JSON");
+        jsonFrames.addActionListener(e -> showJsonFrames());
+        view.add(jsonFrames);
+
+        JMenu extras = new JMenu("Extras");
+        JMenuItem bench = new JMenuItem("Benchmark (lokal vs. RPC) ...");
+        bench.setToolTipText("Aufgabe 6: Dauer lokaler Aufruf vs. entfernter RMI-Aufruf");
+        bench.addActionListener(e -> runBenchmark());
+        extras.add(bench);
+
+        bar.add(view);
+        bar.add(extras);
+        return bar;
+    }
+
+    /** Zeigt den Spielstand so, wie er als JSON-String vom Server kommt. */
+    private void showJsonState() {
+        msgLabel.setText(" ");
+        try {
+            showTextDialog("Spielstand als JSON (Server -> Client)",
+                    service.getStateJson(current));
+        } catch (GameRuleException | RemoteException e) {
+            msgLabel.setText("JSON nicht verfuegbar: " + e.getMessage());
+        }
+    }
+
+    /** Zeigt die zuletzt empfangenen Kampf-Frames (DTOs der Animation) als JSON. */
+    private void showJsonFrames() {
+        if (lastFrames == null || lastFrames.isEmpty()) {
+            showTextDialog("Kampf-Frames als JSON",
+                    "Noch kein Kampf gespielt - es liegen keine Frames vor.");
+            return;
+        }
+        CombatFrameDto last = lastFrames.get(lastFrames.size() - 1);
+        showTextDialog("Kampf-Frames als JSON (Server -> Client)",
+                "Frames insgesamt: " + lastFrames.size() + "  (hier der letzte Tick)\n\n"
+                        + JsonMapper.write(JsonMapper.toJson(last), true));
+    }
+
+    /** Schickt eine Konsoleneingabe (z.B. "buy 1") als JSON zum Server und zeigt Request + Response. */
+    private void sendJsonCommand() {
+        if (combatPlayback) return;
+        String input = JOptionPane.showInputDialog(this,
+                "Befehl wie in der Konsole, z.B.  buy 1  |  reroll  |  levelup  |  tofield 1 0 0",
+                "Befehl als JSON senden", JOptionPane.PLAIN_MESSAGE);
+        if (input == null || input.isBlank()) return;
+        String line = input.trim();
+        try {
+            // Command-Pattern: parse() validiert Name und Argumente der Eingabe
+            Command.parse(line);
+            String request = JsonMapper.commandJson(line, current);
+            String response = service.executeJson(request);
+            PlayerDto p = JsonMapper.toPlayer(response);
+            showTextDialog("JSON-Roundtrip (Client -> Server -> Client)",
+                    "--> Request  (Marshalling auf dem Client)\n" + request
+                            + "\n<-- Response (Marshalling auf dem Server)\n" + response
+                            + "\nUnmarshalling auf dem Client: " + p.name() + " | HP " + p.hp()
+                            + " | Gold " + p.gold() + " | Level " + p.level());
+            refresh();
+        } catch (GameRuleException e) {
+            msgLabel.setText(e.getMessage()); // als Exception vom Server uebertragen
+        } catch (IllegalArgumentException e) {
+            msgLabel.setText("Ungueltiger Befehl: " + e.getMessage());
+            Toolkit.getDefaultToolkit().beep();
+        } catch (RemoteException e) {
+            msgLabel.setText("Verbindungsfehler: " + e.getMessage());
+        }
+    }
+
+    /** Aufgabe 6: lokale Aufrufe vs. entfernte RPC-Aufrufe messen (im Hintergrund). */
+    private void runBenchmark() {
+        String count = JOptionPane.showInputDialog(this,
+                "Anzahl Aufrufe je Methode:", RpcBenchmark.DEFAULT_ITERATIONS);
+        if (count == null || count.isBlank()) return;
+        int iterations;
+        try {
+            iterations = Integer.parseInt(count.trim());
+        } catch (NumberFormatException e) {
+            msgLabel.setText("Bitte eine Zahl eingeben, z.B. 300");
+            return;
+        }
+        msgLabel.setText("Benchmark laeuft (" + iterations + " Aufrufe je Methode) ...");
+        setCursor(Cursor.getPredefinedCursor(Cursor.WAIT_CURSOR));
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return RpcBenchmark.compare(service, serverHost, iterations);
+            }
+
+            @Override
+            protected void done() {
+                setCursor(Cursor.getDefaultCursor());
+                msgLabel.setText(" ");
+                try {
+                    showTextDialog("Aufgabe 6: lokaler Aufruf vs. entfernter RPC", get());
+                } catch (Exception e) {
+                    msgLabel.setText("Benchmark fehlgeschlagen: " + e.getMessage());
+                }
+            }
+        }.execute();
+    }
+
+    private void showTextDialog(String title, String text) {
+        JTextArea area = new JTextArea(text, 26, 90);
+        area.setEditable(false);
+        area.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        area.setCaretPosition(0);
+        JOptionPane.showMessageDialog(this, new JScrollPane(area), title, JOptionPane.INFORMATION_MESSAGE);
+    }
+    // AI-GENERATED-END
+
     // ---------- GameListener (Callbacks von der Spiellogik) ----------
 
     @Override
@@ -252,6 +387,7 @@ public class SwingMain extends JFrame implements GameListener {
     // AI-GENERATED-END
     public void onCombatFrames(int round, List<CombatFrameDto> frames) throws RemoteException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
+        lastFrames = frames;
         combatPlayback = true;
         statusLabel.setText("Kampf wird ausgetragen ...");
         boardPanel.playFrames(frames, this::afterCombat);
@@ -371,7 +507,7 @@ public class SwingMain extends JFrame implements GameListener {
                 GameService service = client.getService();
 
                 // GUI erstellen
-                SwingMain ui = new SwingMain(service);
+                SwingMain ui = new SwingMain(service, host);
 
                 // Listener beim Server registrieren (bidirektionale Kommunikation)
                 client.registerListener(ui);

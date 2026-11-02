@@ -107,6 +107,63 @@ public final class JsonMapper {
         return arr.build();
     }
 
+    // AI-GENERATED-START: Kampf-DTOs (Animation) ebenfalls als JSON - 2026-11-02 15:40 CET
+    public static JsonObject toJson(UnitStateDto u) {
+        return Json.createObjectBuilder()
+                .add("team", u.team())
+                .add("row", u.row())
+                .add("col", u.col())
+                .add("name", u.name())
+                .add("star", u.star())
+                .add("hp", u.hp())
+                .add("maxHp", u.maxHp())
+                .add("alive", u.alive())
+                .build();
+    }
+
+    public static JsonObject toJson(CombatEventDto e) {
+        return Json.createObjectBuilder()
+                .add("team", e.team())
+                .add("fromRow", e.fromRow())
+                .add("fromCol", e.fromCol())
+                .add("toRow", e.toRow())
+                .add("toCol", e.toCol())
+                .add("damage", e.damage())
+                .add("text", e.text())
+                .build();
+    }
+
+    public static JsonObject toJson(CombatFrameDto f) {
+        JsonArrayBuilder units = Json.createArrayBuilder();
+        f.units().forEach(u -> units.add(toJson(u)));
+        JsonArrayBuilder events = Json.createArrayBuilder();
+        f.events().forEach(e -> events.add(toJson(e)));
+        return Json.createObjectBuilder()
+                .add("tick", f.tick())
+                .add("units", units)
+                .add("events", events)
+                .build();
+    }
+
+    public static CombatFrameDto toCombatFrame(JsonObject o) {
+        List<UnitStateDto> units = new ArrayList<>();
+        o.getJsonArray("units").forEach(v -> units.add(toUnitState((JsonObject) v)));
+        List<CombatEventDto> events = new ArrayList<>();
+        o.getJsonArray("events").forEach(v -> events.add(toCombatEvent((JsonObject) v)));
+        return new CombatFrameDto(o.getInt("tick"), units, events);
+    }
+
+    public static UnitStateDto toUnitState(JsonObject o) {
+        return new UnitStateDto(o.getInt("team"), o.getInt("row"), o.getInt("col"), o.getString("name"),
+                o.getInt("star"), o.getInt("hp"), o.getInt("maxHp"), o.getBoolean("alive"));
+    }
+
+    public static CombatEventDto toCombatEvent(JsonObject o) {
+        return new CombatEventDto(o.getInt("team"), o.getInt("fromRow"), o.getInt("fromCol"),
+                o.getInt("toRow"), o.getInt("toCol"), o.getInt("damage"), o.getString("text"));
+    }
+    // AI-GENERATED-END
+
     /**
      * Baut die JSON-Anfrage fuer einen Konsolenbefehl, z.B.
      * {@code buy 1} + playerId 0 -> {@code {"cmd":"buy","playerId":0,"args":[1]}}.
