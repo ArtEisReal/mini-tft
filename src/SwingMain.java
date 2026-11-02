@@ -16,6 +16,10 @@ import java.util.List;
  * Rechtsklick auf eigene Einheit = verkaufen. Nach "Fertig" wird der Kampf animiert.
  */
 public class SwingMain extends JFrame implements GameListener {
+    /** Eigene IP-Adresse des Client-Rechners. */
+    private static final String DEFAULT_CLIENT_HOST = "10.8.3.3";
+    /** IP-Adresse des Rechners, auf dem RmiServer läuft. */
+    private static final String DEFAULT_SERVER_HOST = "10.8.3.3";
     private static final String[] NAMES = {"Spieler1", "Spieler2"};
     private static final Color[] COST_COLORS = {
             new Color(120, 124, 135),  // Kosten 1
@@ -494,7 +498,11 @@ public class SwingMain extends JFrame implements GameListener {
     // AI-GENERATED-END
         // AI-GENERATED-START: Server-Host-Resolution (Argument / minitft.server / localhost) - 2026-11-02 12:41 CET
         // Server-Host: erst Argument, sonst minitft.server/MINITFT_SERVER, sonst "localhost"
-        String host = RmiConfig.serverHost(args);
+        // Die Konstanten ermöglichen den Start direkt aus IntelliJ ohne Argumente.
+        if (System.getProperty("minitft.host") == null) {
+            System.setProperty("minitft.host", DEFAULT_CLIENT_HOST);
+        }
+        String host = args.length > 0 ? args[0] : DEFAULT_SERVER_HOST;
         // AI-GENERATED-END
 
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
