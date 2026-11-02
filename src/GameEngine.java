@@ -68,6 +68,10 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     @Override
     public synchronized void addListener(GameListener listener) throws RemoteException {
         listeners.add(listener);
+        // AI-GENERATED-START: Feedback, wenn sich ein Client registriert - 2026-11-02 13:02 CET
+        System.out.println("Client verbunden (Listener registriert) - insgesamt "
+                + listeners.size() + " Listener.");
+        // AI-GENERATED-END
     }
 
     // ---------- Befehle (vom Client aufgerufen) ----------
@@ -186,6 +190,39 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
         Player opp = players[1 - playerId];
         return new GameStateDto(round, p.toDto(false), opp.toDto(true), gameOver, winnerName);
     }
+
+    // AI-GENERATED-START: Aufgabe 6 - Benchmark-Aufruf (identischer Code lokal und remote) - 2026-11-02 14:40 CET
+    @Override
+    public long ping() throws RemoteException {
+        return System.nanoTime();
+    }
+    // AI-GENERATED-END
+
+    // AI-GENERATED-START: JSON-RPC-Varianten - Marshalling/Unmarshalling mit JSON-P - 2026-11-02 14:10 CET
+    @Override
+    public synchronized String getStateJson(int playerId) throws GameRuleException, RemoteException {
+        return JsonMapper.write(JsonMapper.toJson(getState(playerId)), true);
+    }
+
+    @Override
+    public synchronized String executeJson(String commandJson) throws GameRuleException, RemoteException {
+        JsonMapper.CommandRequest req = JsonMapper.parseCommand(commandJson);
+        PlayerDto result;
+        switch (req.cmd()) {
+            case "buy" -> result = buy(req.playerId(), req.arg(0));
+            case "sell" -> result = sell(req.playerId(), req.arg(0));
+            case "sellbench" -> result = sellBench(req.playerId(), req.arg(0));
+            case "tofield" -> result = toField(req.playerId(), req.arg(0), req.arg(1), req.arg(2));
+            case "tobench" -> result = toBench(req.playerId(), req.arg(0));
+            case "move" -> result = move(req.playerId(), req.arg(0), req.arg(1), req.arg(2));
+            case "levelup" -> result = levelUp(req.playerId());
+            case "reroll" -> result = reroll(req.playerId());
+            case "ready" -> result = ready(req.playerId());
+            default -> throw new GameRuleException("Unbekannter JSON-Befehl: \"" + req.cmd() + "\"");
+        }
+        return JsonMapper.write(JsonMapper.toJson(result), true);
+    }
+    // AI-GENERATED-END
 
     // ---------- interne Logik ----------
 

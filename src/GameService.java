@@ -36,6 +36,30 @@ public interface GameService extends Remote {
 
     GameStateDto getState(int playerId) throws GameRuleException, RemoteException;
 
+    // AI-GENERATED-START: Aufgabe 6 - Minimalaufruf fuer den Lokal-vs-RPC-Benchmark - 2026-11-02 14:40 CET
+    /**
+     * Minimaler "Ping" ohne Nutzlast: dient nur dem Benchmark (Aufgabe 6),
+     * um die reine RPC-Grundkosten ohne Serialisierung groesserer Objekte zu messen.
+     * Gibt die Server-Zeit (Nanosekunden) zurueck.
+     */
+    long ping() throws RemoteException;
+    // AI-GENERATED-END
+
+    // AI-GENERATED-START: JSON-Varianten fuer das menschenlesbare Nachrichtenformat (JSON-P) - 2026-11-02 14:10 CET
+    /**
+     * Spielstand als menschenlesbaren JSON-String (Marshalling auf dem Server,
+     * Unmarshalling auf dem Client). Richtung Server -> Client.
+     */
+    String getStateJson(int playerId) throws GameRuleException, RemoteException;
+
+    /**
+     * Fuehrt einen als JSON uebertragenen Befehl aus (Richtung Client -> Server):
+     * die Anfrage wird mit dem JsonParser unmarshalled, das Ergebnis-DTO
+     * wieder als JSON marshalled zurueckgeschickt.
+     */
+    String executeJson(String commandJson) throws GameRuleException, RemoteException;
+    // AI-GENERATED-END
+
     /** Der Client meldet sich für Callbacks an (Richtung 2). Der Listener ist ein Remote-Objekt auf dem Client. */
     void addListener(GameListener listener) throws RemoteException;
 }

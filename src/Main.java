@@ -42,6 +42,12 @@ public class Main implements GameListener {
         System.out.println("Mini-TFT. Befehle: buy <shop> | levelup | reroll | ready | quit");
         System.out.println("  tofield <bench> <zeile> <spalte> | tobench <feld-pos> | move <feld-pos> <zeile> <spalte>");
         System.out.println("  sell <feld-pos> | sellbench <bench>");
+        // AI-GENERATED-START: JSON-Kommandozeile fuer das menschenlesbare Nachrichtenformat - 2026-11-02 14:10 CET
+        System.out.println("  state                  -> Spielstand als JSON vom Server holen (Richtung Server->Client)");
+        System.out.println("  json <befehl ...>      -> Befehl als JSON senden, Antwort als JSON empfangen (Client->Server)");
+        System.out.println("     z.B.  json buy 1    ->  {\"cmd\":\"buy\",\"playerId\":0,\"args\":[1]}");
+        System.out.println("  bench [n]              -> Aufgabe 6: lokale Aufrufe vs. entfernte RPC-Aufrufe messen");
+        // AI-GENERATED-END
 
         try {
             while (true) {
@@ -59,6 +65,48 @@ public class Main implements GameListener {
                             client.close();
                             return;
                         }
+                        // AI-GENERATED-START: Aufgabe 6 - Benchmark lokaler vs. entfernter Aufrufe - 2026-11-02 14:40 CET
+                        if (line.equals("bench") || line.startsWith("bench ")) {
+                            try {
+                                int n = line.equals("bench")
+                                        ? RpcBenchmark.DEFAULT_ITERATIONS
+                                        : Integer.parseInt(line.substring(5).trim());
+                                System.out.println(RpcBenchmark.compare(service, host, n));
+                            } catch (NumberFormatException e) {
+                                System.out.println("Fehler: bench erwartet eine Zahl, z.B.  bench 200");
+                            } catch (Exception e) {
+                                System.out.println("Benchmark fehlgeschlagen: " + e.getMessage());
+                            }
+                            st = service.getState(pid);
+                            continue;
+                        }
+                        // AI-GENERATED-END
+                        // AI-GENERATED-START: JSON-Roundtrip (Marshalling -> RMI -> Unmarshalling) - 2026-11-02 14:10 CET
+                        if (line.equals("state")) {
+                            System.out.println("<-- Response (GameStateDto, Marshalling auf dem Server):");
+                            System.out.println(service.getStateJson(pid));
+                            st = service.getState(pid);
+                            continue;
+                        }
+                        if (line.toLowerCase().startsWith("json ")) {
+                            try {
+                                String request = JsonMapper.commandJson(line.substring(5), pid);
+                                System.out.println("--> Request (Befehl, Marshalling auf dem Client):");
+                                System.out.println(request);
+                                String response = service.executeJson(request);
+                                System.out.println("<-- Response (PlayerDto, Marshalling auf dem Server):");
+                                System.out.println(response);
+                                PlayerDto p = JsonMapper.toPlayer(response);
+                                System.out.println("Unmarshalling auf dem Client: " + p.name()
+                                        + " | HP " + p.hp() + " | Gold " + p.gold() + " | Level " + p.level()
+                                        + " | Feld " + p.board().size() + " | Bench " + p.bench().size());
+                            } catch (GameRuleException | IllegalArgumentException e) {
+                                System.out.println("Fehler (als Exception uebertragen): " + e.getMessage());
+                            }
+                            st = service.getState(pid);
+                            continue;
+                        }
+                        // AI-GENERATED-END
                         try {
                             Command.parse(line).execute(service, pid);
                         } catch (GameRuleException | IllegalArgumentException e) {
@@ -115,6 +163,9 @@ public class Main implements GameListener {
     @Override
     public void onCombatFinished(CombatResultDto r) {
         System.out.println("\n##### KAMPF Runde " + r.round() + " #####");
+        // AI-GENERATED-START: empfangenes DTO clientseitig als JSON marshallen (Anzeige) - 2026-11-02 14:10 CET
+        System.out.println(JsonMapper.write(JsonMapper.toJson(r), true));
+        // AI-GENERATED-END
         r.log().forEach(System.out::println);
         System.out.println(r.winnerId() < 0 ? "Unentschieden!" : "Sieger: Spieler" + (r.winnerId() + 1)
                 + " (Gegner verliert " + r.damage() + " HP)");

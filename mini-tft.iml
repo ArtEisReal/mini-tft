@@ -8,5 +8,15 @@
     </content>
     <orderEntry type="inheritedJdk" />
     <orderEntry type="sourceFolder" forTests="false" />
+    <!-- JSON-P (javax.json) fuer das menschenlesbare Nachrichtenformat -->
+    <orderEntry type="module-library" scope="COMPILE">
+      <library name="javax.json-1.1.4">
+        <CLASSES>
+          <root url="jar://$MODULE_DIR$/lib/javax.json-1.1.4.jar!/" />
+        </CLASSES>
+        <JAVADOC />
+        <SOURCES />
+      </library>
+    </orderEntry>
   </component>
 </module>

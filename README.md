@@ -7,16 +7,19 @@ Clients (`SwingMain` für die GUI, `Main` für die Konsole) verbinden sich per R
 ## Bauen
 
 ```bash
-javac -d out src/*.java
+javac -cp lib/javax.json-1.1.4.jar -d out src/*.java
 ```
+
+Der Klassenpfad (`-cp`) wird an allen Stellen weiter unten gebraucht – unter
+Windows ist statt `:` ein `;` zu verwenden (`out;lib/javax.json-1.1.4.jar`).
 
 ## Lokal starten (ein Rechner, Hot-Seat)
 
 ```bash
-java -cp out RmiServer                 # Terminal 1
-java -cp out SwingMain                 # Terminal 2 – beide spielen abwechselnd
+java -cp out:lib/javax.json-1.1.4.jar RmiServer                 # Terminal 1
+java -cp out:lib/javax.json-1.1.4.jar SwingMain                 # Terminal 2 – beide spielen abwechselnd
 # oder Konsole:
-java -cp out Main
+java -cp out:lib/javax.json-1.1.4.jar Main
 ```
 
 ## Server auf einem anderen Rechner (z.B. VPN)
@@ -28,14 +31,14 @@ Seiten braucht.
 **1. Server-Rechner** – eigene IP setzen und starten:
 
 ```bash
-javac -d out src/*.java
-java -cp out -Dminitft.host=<SERVER-VPN-IP> RmiServer
+javac -cp lib/javax.json-1.1.4.jar -d out src/*.java
+java -cp out:lib/javax.json-1.1.4.jar -Dminitft.host=<SERVER-VPN-IP> RmiServer
 ```
 
 `minitft.host` schreibt `java.rmi.server.hostname`. Ohne diesen Schritt steckt
 ein lokaler Name (z.B. `MacBook-Pro.local`) in den RMI-Stubs – der andere
 Rechner kann ihn nicht auflösen, `Naming.lookup` schlägt fehl.
-Env-Alternative: `MINITFT_HOST=10.8.0.2 java -cp out RmiServer`.
+Env-Alternative: `MINITFT_HOST=10.8.0.2 java -cp out:lib/javax.json-1.1.4.jar RmiServer`.
 
 **2. Firewall auf dem Server** – eingehend erlauben:
 
@@ -47,8 +50,8 @@ Env-Alternative: `MINITFT_HOST=10.8.0.2 java -cp out RmiServer`.
 **3. Client-Rechner** – Server-IP als Argument, eigene IP für die Callbacks:
 
 ```bash
-javac -d out src/*.java
-java -cp out -Dminitft.host=<CLIENT-VPN-IP> SwingMain <SERVER-VPN-IP>
+javac -cp lib/javax.json-1.1.4.jar -d out src/*.java
+java -cp out:lib/javax.json-1.1.4.jar -Dminitft.host=<CLIENT-VPN-IP> SwingMain <SERVER-VPN-IP>
 ```
 
 Ohne `minitft.host` auf dem Client kann der Server die **Callbacks**
@@ -89,11 +92,80 @@ Windows: `netsh advfirewall firewall add rule name="RMI" dir=in action=allow pro
 | `minitft.enginePort` | – | Port des GameEngine | `1100` |
 | `minitft.listenerPort` | – | Port des GameListener (`0` = anonym) | `1098` |
 
+## Menschenlesbares Nachrichtenformat (JSON-P)
+
+Bibliothek: **JSON-P / JSR 374** (`javax.json`), Referenz-Implementierung
+`lib/javax.json-1.1.4.jar` (aus Maven Central, `org.glassfish:javax.json:1.1.4`).
+In IntelliJ ist die JAR unter *Project Structure → Modules → Dependencies*
+eingebunden (steht in `mini-tft.iml`).
+
+| Richtung | Methode (in `GameService`) | Marshalling | Unmarshalling |
+|----------|----------------------------|-------------|---------------|
+| Client → Server | `String executeJson(String commandJson)` | `JsonMapper.commandJson()` (Objekt → JSON) | `JsonMapper.parseCommand()` via **JsonParser** (ereignisbasiert) |
+| Server → Client | `String getStateJson(int playerId)` | `JsonMapper.toJson(GameStateDto)` | `JsonMapper.toGameState()` / `toPlayer()` / `toUnit()` |
+| Server → Client (Callback) | `GameListener.onCombatFinished(CombatResultDto)` | RMI-Objekt, wird clientseitig als JSON dargestellt | `JsonMapper.toCombatResult()` |
+
+Beispiele (im Konsolen-Client `Main`):
+
+```
+state            ->  Spielstand als JSON vom Server (Richtung Server -> Client)
+json buy 1       ->  --> {"cmd":"buy","playerId":0,"args":[1]}
+                     <-- { ... PlayerDto als JSON ... }
+                     Unmarshalling auf dem Client: Alice | HP 30 | Gold 8 | ...
+json buy         ->  Fehler (als Exception uebertragen): JSON-Befehl "buy" braucht Argument 1
+```
+
+Der Transport bleibt RMI/JRMP; das Nutzformat der beiden JSON-Methoden ist
+String-JSON, d.h. auf dem Draht liegt ein menschenlesbarer Text. Fehlt ein
+Argument oder ist das JSON kaputt, entsteht eine `GameRuleException`, die RMI
+vom Server zum Client überträgt (Aufgabe 7 – Exception-Übertragung).
+
+Klassen mit Stubs (nur diese sind `Remote`/werden verteiltem):
+`GameService` + `GameEngine` (Client → Server), `GameListener` +
+`RmiClient.GameListenerProxy` (Server → Client); Registry `RmiServer`.
+
+## Aufgabe 6: lokaler Aufruf vs. entfernter RPC
+
+`RpcBenchmark` misst **dieselbe Methode auf derselben Implementierung** zweimal:
+einmal als direkten Aufruf im selben JVM (Objekt-Referenz, kein Stub), einmal
+über den RMI-Stub (Marshalling → TCP → Server → Unmarshalling).
+
+```bash
+# eigenständig gegen einen Rechner:
+java -cp out:lib/javax.json-1.1.4.jar RpcBenchmark <SERVER-IP> 500
+
+# oder im Konsolen-Client:
+bench            # 500 Messungen je Methode
+bench 200        # eigene Anzahl
+```
+
+Messreihen mit steigender Nutzlast:
+
+| Methode | Was gemessen wird |
+|---------|-------------------|
+| `ping()` | reine RPC-Grundkosten (kein Payload, Methode gibt `long` zurück) |
+| `getState(0)` | + Serialisierung der DTOs (Listen mit `UnitDto`) |
+| `getStateJson(0)` | + JSON-Marshalling/Unmarshalling (JSON-P) des gleichen DTO |
+
+Beispielzahlen (gleicher Rechner, d.h. **ohne** Netzwerklatenz):
+
+```
+ping()          lokal Ø 0,12 µs | remote Ø 56 µs   Faktor ~460
+getState(0)     lokal Ø 5,5  µs | remote Ø 83 µs   Faktor ~15
+getStateJson(0) lokal Ø 98   µs | remote Ø 132 µs  Faktor ~1,4
+```
+
+Für die Abnahme zusätzlich gegen die **IP des zweiten Rechners** messen
+(`RpcBenchmark 10.8.3.3`) – dann kommt die echte Netzwerklatenz zum
+Protokoll-/Serialisierungsaufwand hinzu. Die Zahlen in der Konsole als
+Tabelle ausgeben und Werte vor dem Vorführen protokollieren.
+
 ## Spiel (Konsolen-Client)
 
 ```
 buy <shop> | levelup | reroll | ready | quit
 tofield <bench> <zeile> <spalte> | tobench <feld-pos> | move <feld-pos> <zeile> <spalte>
 sell <feld-pos> | sellbench <bench>
+state | json <befehl ...> | bench [n]   # JSON-Varianten und Benchmark, siehe oben
 ```
 <!-- AI-GENERATED-END -->
