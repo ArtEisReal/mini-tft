@@ -1,5 +1,3 @@
-import java.rmi.RemoteException;
-import java.rmi.server.UnicastRemoteObject;
 // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.util.ArrayList;
 import java.util.List;
@@ -10,12 +8,14 @@ import java.util.Random;
  * Spiellogik. Implementiert GameService (Design Pattern: Facade).
  * Läuft auf dem Server; der Client sieht nur GameService + DTOs.
  * 
- * RMI-Anpassung: Erbt von UnicastRemoteObject für Remote-Zugriff.
+ * Technologieunabhaengig: keine RMI-Abhaengigkeit mehr.
+ * Fuer RMI-Betrieb wird RmiGameService als Adapter verwendet.
+ * Fuer JMS-Betrieb wird GameEngine direkt von JmsServer genutzt.
  * 
  * Einheiten: Kauf -> Bench -> per toField aufs Feld (begrenzt durch das Level).
  * 3 gleiche Einheiten (Bench + Feld zusammen) verschmelzen zur naechsten Sternstufe.
  */
-public class GameEngine extends UnicastRemoteObject implements GameService {
+public class GameEngine implements GameService {
     // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     /** Brettgroesse und Bretthalfte: Spieler 0 besetzt die oberen Zeilen, Spieler 1 die unteren. */
     static final int BOARD_SIZE = 9;
@@ -39,29 +39,22 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     private int turn = 0;
     // AI-GENERATED-END
 
-    // AI-GENERATED-START: Konstruktoren - fester Export-Port (0 = anonym) als neue Variante, Bestandskonstruktoren delegieren - 2026-11-02 12:41 CET
-    /** Erstellt den RMI-Stub auf einem anonymen Port. */
-    protected GameEngine(String name0, String name1) throws RemoteException {
-        this(name0, name1, new UnitFactory(new Random()), 0);
+    // AI-GENERATED-START: Konstruktoren - Bestandskonstruktoren delegieren - 2026-11-02 12:41 CET
+    /** Erstellt die GameEngine (lokal, ohne RMI-Export). */
+    protected GameEngine(String name0, String name1) {
+        this(name0, name1, new UnitFactory(new Random()));
     }
 
     /**
-     * Erstellt den RMI-Stub auf einem festen Port (0 = anonymer Port).
-     * Fester Port = nur eine Firewall-Regel noetig, wenn der Server
-     * auf einem anderen Rechner laeuft.
+     * Erstellt die GameEngine mit einem festen Port (nur fuer RMI-Betrieb ueber RmiGameService).
+     * Der Parameter wird hier ignoriert; RmiGameService exportiert das Objekt.
      */
-    protected GameEngine(String name0, String name1, int port) throws RemoteException {
-        this(name0, name1, new UnitFactory(new Random()), port);
+    protected GameEngine(String name0, String name1, int port) {
+        this(name0, name1, new UnitFactory(new Random()));
     }
 
     /** Mit eigener Factory (z.B. fuer deterministische Tests). */
-    protected GameEngine(String name0, String name1, UnitFactory factory) throws RemoteException {
-        this(name0, name1, factory, 0);
-    }
-
-    /** Mit eigener Factory und festem Port. */
-    protected GameEngine(String name0, String name1, UnitFactory factory, int port) throws RemoteException {
-        super(port);
+    protected GameEngine(String name0, String name1, UnitFactory factory) {
         this.factory = factory;
         players = new Player[] {new Player(0, name0), new Player(1, name1)};
     }
@@ -74,7 +67,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized void addListener(GameListener listener) throws RemoteException {
+    public synchronized void addListener(GameListener listener) {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         listeners.add(listener);
         // AI-GENERATED-END
@@ -89,7 +82,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto buy(int playerId, int slot) throws GameRuleException, RemoteException {
+    public synchronized PlayerDto buy(int playerId, int slot) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         int idx = slot - 1;
@@ -105,7 +98,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto sell(int playerId, int index) throws GameRuleException, RemoteException {
+    public synchronized PlayerDto sell(int playerId, int index) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
@@ -116,7 +109,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto sellBench(int playerId, int slot) throws GameRuleException, RemoteException {
+    public synchronized PlayerDto sellBench(int playerId, int slot) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = benchUnit(p, slot);
@@ -127,7 +120,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto move(int playerId, int index, int row, int col) throws GameRuleException, RemoteException {
+    public synchronized PlayerDto move(int playerId, int index, int row, int col) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
@@ -144,7 +137,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto toField(int playerId, int benchSlot, int row, int col) throws GameRuleException, RemoteException {
+    public synchronized PlayerDto toField(int playerId, int benchSlot, int row, int col) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = benchUnit(p, benchSlot);
@@ -168,7 +161,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto toBench(int playerId, int index) throws GameRuleException, RemoteException {
+    public synchronized PlayerDto toBench(int playerId, int index) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         Unit u = fieldUnit(p, index);
@@ -182,7 +175,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto levelUp(int playerId) throws GameRuleException, RemoteException {
+    public synchronized PlayerDto levelUp(int playerId) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         if (p.level >= MAX_LEVEL) throw new GameRuleException("Maximales Level erreicht (" + MAX_LEVEL + ")");
@@ -194,7 +187,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto reroll(int playerId) throws GameRuleException, RemoteException {
+    public synchronized PlayerDto reroll(int playerId) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = activePlayer(playerId);
         if (p.gold < REROLL_COST) throw new GameRuleException("Zu wenig Gold fuer Reroll (" + REROLL_COST + ")");
@@ -205,7 +198,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public PlayerDto ready(int playerId) throws GameRuleException, RemoteException {
+    public PlayerDto ready(int playerId) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p;
         boolean bothReady;
@@ -224,7 +217,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
         // Callbacks AUSSERHALB des Locks senden, damit Clients getState() aufrufen koennen
         for (GameListener l : listeners) {
             try { l.onTurnChanged(turnValue); }
-            catch (RemoteException e) {
+            catch (Exception e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
@@ -242,7 +235,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized GameStateDto getState(int playerId) throws GameRuleException, RemoteException {
+    public synchronized GameStateDto getState(int playerId) throws GameRuleException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = player(playerId);
         Player opp = players[1 - playerId];
@@ -252,19 +245,19 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     // AI-GENERATED-START: Aufgabe 6 - Benchmark-Aufruf (identischer Code lokal und remote) - 2026-11-02 14:40 CET
     @Override
-    public long ping() throws RemoteException {
+    public long ping() {
         return System.nanoTime();
     }
     // AI-GENERATED-END
 
     // AI-GENERATED-START: JSON-RPC-Varianten - Marshalling/Unmarshalling mit JSON-P - 2026-11-02 14:10 CET
     @Override
-    public synchronized String getStateJson(int playerId) throws GameRuleException, RemoteException {
+    public synchronized String getStateJson(int playerId) throws GameRuleException {
         return JsonMapper.write(JsonMapper.toJson(getState(playerId)), true);
     }
 
     @Override
-    public synchronized String executeJson(String commandJson) throws GameRuleException, RemoteException {
+    public synchronized String executeJson(String commandJson) throws GameRuleException {
         JsonMapper.CommandRequest req = JsonMapper.parseCommand(commandJson);
         PlayerDto result;
         switch (req.cmd()) {
@@ -367,7 +360,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
                         // AI-GENERATED-END
                         for (GameListener l : listeners) {
                             try { l.onUnitCombined(p.id, a.name, a.star); }
-                            catch (RemoteException e) {
+                            catch (Exception e) {
                                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
                             }
                         }
@@ -402,13 +395,13 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
         // Callbacks AUSSERHALB des Locks senden
         for (GameListener l : listeners) {
             try { l.onRoundStarted(roundNum); }
-            catch (RemoteException e) {
+            catch (Exception e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
         for (GameListener l : listeners) {
             try { l.onTurnChanged(turnPlayer); }
-            catch (RemoteException e) {
+            catch (Exception e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
@@ -467,14 +460,14 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
         // Callbacks AUSSERHALB des Locks senden — Clients koennen jetzt getState() aufrufen
         for (GameListener l : listeners) {
             try { l.onCombatFrames(round, frames); }
-            catch (RemoteException e) {
+            catch (Exception e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
 
         for (GameListener l : listeners) {
             try { l.onCombatFinished(result); }
-            catch (RemoteException e) {
+            catch (Exception e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
@@ -482,7 +475,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
         if (isGameOver) {
             for (GameListener l : listeners) {
                 try { l.onGameOver(winner); }
-                catch (RemoteException e) {
+                catch (Exception e) {
                     System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
                 }
             }

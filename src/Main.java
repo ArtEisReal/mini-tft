@@ -1,8 +1,5 @@
 import javax.swing.JOptionPane;
 import javax.swing.SwingUtilities;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
-import java.rmi.server.UnicastRemoteObject;
 
 /**
  * Lokale, nichtverteilte Swing-Variante des Spiels.
@@ -23,23 +20,11 @@ public final class Main {
                 GameEngine engine = new GameEngine(name0, name1);
                 SwingMain ui = new SwingMain(engine, "lokal");
 
-                // Der Listener wird vor dem Rundenstart registriert, damit
-                // auch das erste Serverereignis lokal empfangen wird.
                 engine.addListener(ui);
                 engine.start();
 
                 ui.setVisible(true);
 
-                ui.addWindowListener(new WindowAdapter() {
-                    @Override
-                    public void windowClosing(WindowEvent event) {
-                        try {
-                            UnicastRemoteObject.unexportObject(engine, true);
-                        } catch (java.rmi.NoSuchObjectException ignored) {
-                            // Die Engine wurde bereits beendet.
-                        }
-                    }
-                });
             } catch (Exception e) {
                 JOptionPane.showMessageDialog(
                         null,

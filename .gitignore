@@ -1,11 +1,18 @@
+# Kompilierte Dateien
 out/
 build/
 target/
 
-# IntelliJ IDEA
-.idea/workspace.xml
-.idea/shelf/
-.idea/httpRequests/
+# ActiveMQ-Distribution (extern herunterladen)
+apache-activemq-6.4.0/
+
+# Test-Hilfsdateien
+start-client1.bat
+start-second-idea.bat
+
+# IntelliJ IDE-Dateien
+.idea/
+*.iws
 
 # OS
 .DS_Store

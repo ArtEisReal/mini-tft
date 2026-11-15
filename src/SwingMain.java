@@ -4,8 +4,6 @@ import java.awt.*;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 // AI-GENERATED-END
-import java.rmi.RemoteException;
-// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 import java.util.List;
 
 /**
@@ -38,7 +36,7 @@ public class SwingMain extends JFrame implements GameListener {
 
     private interface Action {
     // AI-GENERATED-END
-        void run() throws GameRuleException, RemoteException;
+        void run() throws GameRuleException;
     // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     }
 
@@ -187,8 +185,8 @@ public class SwingMain extends JFrame implements GameListener {
         } catch (GameRuleException e) {
             msgLabel.setText(e.getMessage());
             // AI-GENERATED-END
-        } catch (RemoteException e) {
-            msgLabel.setText("Verbindungsfehler: " + e.getMessage());
+        } catch (RuntimeException e) {
+            msgLabel.setText("Fehler: " + e.getMessage());
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         }
         refresh();
@@ -202,8 +200,8 @@ public class SwingMain extends JFrame implements GameListener {
             msgLabel.setText(e.getMessage());
             return;
             // AI-GENERATED-END
-        } catch (RemoteException e) {
-            msgLabel.setText("Verbindungsfehler: " + e.getMessage());
+        } catch (RuntimeException e) {
+            msgLabel.setText("Fehler: " + e.getMessage());
             return;
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         }
@@ -260,8 +258,8 @@ public class SwingMain extends JFrame implements GameListener {
         } catch (GameRuleException e) {
             throw new IllegalStateException(e);
             // AI-GENERATED-END
-        } catch (RemoteException e) {
-            throw new IllegalStateException("Verbindungsfehler: " + e.getMessage(), e);
+        } catch (RuntimeException e) {
+            throw new IllegalStateException("Fehler: " + e.getMessage(), e);
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         }
     }
@@ -342,7 +340,7 @@ public class SwingMain extends JFrame implements GameListener {
         try {
             showTextDialog("Spielstand als JSON (Server -> Client)",
                     service.getStateJson(activeId()));
-        } catch (GameRuleException | RemoteException e) {
+        } catch (GameRuleException | RuntimeException e) {
             msgLabel.setText("JSON nicht verfuegbar: " + e.getMessage());
         }
     }
@@ -385,8 +383,8 @@ public class SwingMain extends JFrame implements GameListener {
         } catch (IllegalArgumentException e) {
             msgLabel.setText("Ungueltiger Befehl: " + e.getMessage());
             Toolkit.getDefaultToolkit().beep();
-        } catch (RemoteException e) {
-            msgLabel.setText("Verbindungsfehler: " + e.getMessage());
+        } catch (RuntimeException e) {
+            msgLabel.setText("Fehler: " + e.getMessage());
         }
     }
 
@@ -441,7 +439,7 @@ public class SwingMain extends JFrame implements GameListener {
 
     @Override
     // AI-GENERATED-END
-    public void onCombatFrames(int round, List<CombatFrameDto> frames) throws RemoteException {
+    public void onCombatFrames(int round, List<CombatFrameDto> frames) {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         lastFrames = frames;
         combatPlayback = true;
@@ -470,7 +468,7 @@ public class SwingMain extends JFrame implements GameListener {
 
     @Override
     // AI-GENERATED-END
-    public void onUnitCombined(int combinedPlayerId, String unitName, int star) throws RemoteException {
+    public void onUnitCombined(int combinedPlayerId, String unitName, int star) {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         String playerName;
         if (this.playerId >= 0) {

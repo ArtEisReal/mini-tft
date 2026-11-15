@@ -1,15 +1,11 @@
-import java.rmi.RemoteException;
-
 /**
  * Design Pattern: Command – jede Konsoleneingabe wird zu einem Command-Objekt,
  * das gegen den GameService ausgefuehrt wird (lokal direkt, spaeter ueber den Stub).
- * 
- * RMI-Anpassung: execute wirft auch RemoteException fuer Remote-Aufrufe.
  */
 // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
 public interface Command {
 // AI-GENERATED-END
-    PlayerDto execute(GameService service, int playerId) throws GameRuleException, RemoteException;
+    PlayerDto execute(GameService service, int playerId) throws GameRuleException;
 
     // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     /** Wandelt eine Eingabezeile in ein Command um. */
