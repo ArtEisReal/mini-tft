@@ -1,5 +1,3 @@
-import java.util.List;
-
 /**
  * Universeller Nachrichten-Wrapper fuer JMS-Kommunikation.
  *
@@ -11,6 +9,7 @@ import java.util.List;
  *   CALLBACK  - Server sendet eine Rueckmeldung an den Client
  *
  * Die Nachricht wird als JSON-Text (JMS TextMessage) uebertragen.
+ * Jede Nachricht enthält eine Vektoruhr zur Nachverfolgung kausaler Abhaengigkeiten.
  */
 public class JmsMessage {
 
@@ -46,41 +45,69 @@ public class JmsMessage {
     private final String payload;
 
     /**
-     * Konstruktor fuer einen Befehl (Client -> Server).
+     * Vektoruhr zur Nachverfolgung kausaler Abhaengigkeiten.
+     * Struktur: [Server_Tick, P1_Tick, P2_Tick]
+     * Kann null sein, wenn keine Vektoruhr gesetzt wurde.
+     */
+    private final VectorClock vectorClock;
+
+    /**
+     * Konstruktor fuer einen Befehl (Client -> Server) ohne Vektoruhr.
      */
     public JmsMessage(String clientId, int playerId, String action, int... args) {
-        this(Type.COMMAND, clientId, playerId, action, args, null);
+        this(Type.COMMAND, clientId, playerId, action, args, null, null);
     }
 
     /**
-     * Konstruktor fuer einen Callback (Server -> Client).
+     * Konstruktor fuer einen Befehl mit Vektoruhr.
+     */
+    public JmsMessage(String clientId, int playerId, String action, VectorClock vectorClock, int... args) {
+        this(Type.COMMAND, clientId, playerId, action, args, null, vectorClock);
+    }
+
+    /**
+     * Konstruktor fuer einen Callback (Server -> Client) ohne Vektoruhr.
      */
     public JmsMessage(String clientId, String action, String payload) {
-        this(Type.CALLBACK, clientId, -1, action, new int[0], payload);
+        this(Type.CALLBACK, clientId, -1, action, new int[0], payload, null);
     }
 
     /**
-     * Konstruktor fuer einen Callback mit Spieler-ID und Argumenten (z.B. onUnitCombined, onRoundStarted).
+     * Konstruktor fuer einen Callback mit Vektoruhr.
+     */
+    public JmsMessage(String clientId, String action, String payload, VectorClock vectorClock) {
+        this(Type.CALLBACK, clientId, -1, action, new int[0], payload, vectorClock);
+    }
+
+    /**
+     * Konstruktor fuer einen Callback mit Spieler-ID und Argumenten.
      */
     public static JmsMessage callback(String clientId, int playerId, String action, int[] args, String payload) {
-        return new JmsMessage(Type.CALLBACK, clientId, playerId, action, args, payload);
+        return new JmsMessage(Type.CALLBACK, clientId, playerId, action, args, payload, null);
+    }
+
+    /**
+     * Konstruktor fuer einen Callback mit Vektoruhr.
+     */
+    public static JmsMessage callback(String clientId, int playerId, String action, int[] args, String payload, VectorClock vectorClock) {
+        return new JmsMessage(Type.CALLBACK, clientId, playerId, action, args, payload, vectorClock);
     }
 
     /**
      * Konstruktor fuer einen Befehl mit Reply-Queue (Request/Reply-Muster, z.B. getState).
-     * Der replyQueue-Parameter enthält den Namen der temporären Reply-Queue.
      */
     public static JmsMessage commandWithReply(String clientId, int playerId, String action, int[] args, String replyQueue) {
-        return new JmsMessage(Type.COMMAND, clientId, playerId, action, args, replyQueue);
+        return new JmsMessage(Type.COMMAND, clientId, playerId, action, args, replyQueue, null);
     }
 
-    private JmsMessage(Type type, String clientId, int playerId, String action, int[] args, String payload) {
+    private JmsMessage(Type type, String clientId, int playerId, String action, int[] args, String payload, VectorClock vectorClock) {
         this.type = type;
         this.clientId = clientId;
         this.playerId = playerId;
         this.action = action;
         this.args = args != null ? args.clone() : new int[0];
         this.payload = payload;
+        this.vectorClock = vectorClock;
     }
 
     public Type type() { return type; }
@@ -89,6 +116,7 @@ public class JmsMessage {
     public int playerId() { return playerId; }
     public int[] args() { return args.clone(); }
     public String payload() { return payload; }
+    public VectorClock vectorClock() { return vectorClock; }
 
     /** Liefert Argument an Position i. */
     public int arg(int i) {
@@ -104,8 +132,9 @@ public class JmsMessage {
 
     @Override
     public String toString() {
+        String vc = (vectorClock != null) ? ", vectorClock=" + vectorClock : "";
         return "JmsMessage{type=" + type + ", client='" + clientId + '\''
-                + ", action='" + action + "', playerId=" + playerId + '}';
+                + ", action='" + action + "', playerId=" + playerId + vc + '}';
     }
 
     // ---------- JSON-Serialisierung (für JMS TextMessage) ----------
@@ -132,6 +161,11 @@ public class JmsMessage {
         if (payload != null) {
             builder.add("payload", payload);
         }
+
+        // vectorClock (kann null sein)
+        if (vectorClock != null) {
+            builder.add("vectorClock", vectorClock.toJson());
+        }
         return builder.build().toString();
     }
 
@@ -156,7 +190,16 @@ public class JmsMessage {
 
         String payload = obj.containsKey("payload") ? obj.getString("payload", null) : null;
 
+        // vectorClock (optional)
+        VectorClock vc = null;
+        if (obj.containsKey("vectorClock")) {
+            String vcJson = obj.getString("vectorClock", null);
+            if (vcJson != null) {
+                vc = VectorClock.fromJson(vcJson);
+            }
+        }
+
         JmsMessage.Type t = "COMMAND".equals(type) ? JmsMessage.Type.COMMAND : JmsMessage.Type.CALLBACK;
-        return new JmsMessage(t, clientId, playerId, action, argsArr, payload);
+        return new JmsMessage(t, clientId, playerId, action, argsArr, payload, vc);
     }
 }

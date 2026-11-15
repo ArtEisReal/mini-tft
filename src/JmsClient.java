@@ -3,6 +3,7 @@ import jakarta.jms.*;
 import javax.swing.SwingUtilities;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * JMS-Client fuer Mini-TFT.
@@ -34,6 +35,20 @@ public class JmsClient {
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /**
+     * Lokale Vektoruhr des Clients: [Server_Tick, P1_Tick, P2_Tick].
+     * Wird bei jedem gesendeten Befehl inkrementiert und bei empfangenen
+     * Callbacks mit der Server-Uhr verschmolzen.
+     */
+    private final VectorClock localClock = new VectorClock();
+
+    /**
+     * Der Index dieses Clients in der Vektoruhr.
+     * Wird vom Server beim ersten Befehl zugewiesen (1 oder 2).
+     * -1 bedeutet: noch nicht bekannt (wird beim ersten Callback ermittelt).
+     */
+    private volatile int myVcIndex = -1;
+
+    /**
      * Erstellt einen Client mit einer zufaelligen ID.
      */
     public JmsClient() {
@@ -41,7 +56,20 @@ public class JmsClient {
     }
 
     /**
+     * Erstellt einen Client mit einer expliziten ID und einem Vektoruhr-Index.
+     * Der Index bestimmt, welche Position in der Vektoruhr diesem Client zugeordnet ist.
+     *
+     * @param clientId  die eindeutige Client-ID
+     * @param vcIndex   der Index in der Vektoruhr (1 fuer Spieler 0, 2 fuer Spieler 1)
+     */
+    public JmsClient(String clientId, int vcIndex) {
+        this.clientId = clientId;
+        this.myVcIndex = vcIndex;
+    }
+
+    /**
      * Erstellt einen Client mit einer expliziten ID.
+     * Der Vektoruhr-Index wird automatisch beim ersten Callback ermittelt.
      */
     public JmsClient(String clientId) {
         this.clientId = clientId;
@@ -72,6 +100,27 @@ public class JmsClient {
                 try {
                     String json = txtMsg.getText();
                     JmsMessage jmsMsg = JmsMessage.fromJson(json);
+
+                    // VEKTORUHR: Bei empfangenen Callbacks die lokale Uhr mit der Server-Uhr merge-n
+                    VectorClock serverClock = jmsMsg.vectorClock();
+                    if (serverClock != null) {
+                        synchronized (localClock) {
+                            VectorClock before = localClock.clone();
+                            localClock.getInternalTicks(); // ensure access
+                            // Elementweises Maximum (merge)
+                            for (int i = 0; i < VectorClock.SIZE; i++) {
+                                int serverVal = serverClock.get(i);
+                                int localVal = localClock.get(i);
+                                if (serverVal > localVal) {
+                                    // Lokale Uhr auf Server-Wert setzen
+                                    localClock.getInternalTicks()[i] = serverVal;
+                                }
+                            }
+                            System.out.println("  [VC-Client] Callback empfangen, Uhr merged: " + before
+                                    + " -> " + localClock);
+                        }
+                    }
+
                     dispatchCallback(jmsMsg);
                 } catch (Exception e) {
                     System.err.println("Fehler beim Verarbeiten der Callback-Nachricht: " + e.getMessage());
@@ -104,7 +153,19 @@ public class JmsClient {
 
     private void sendCommand(String action, int playerId, int... args) throws JMSException {
         if (closed.get()) throw new java.lang.IllegalStateException("Client ist geschlossen");
-        JmsMessage msg = new JmsMessage(clientId, playerId, action, args);
+
+        // VEKTORUHR: Eigene Uhr inkrementieren und in Nachricht einbetten
+        VectorClock clockToSend;
+        synchronized (localClock) {
+            if (myVcIndex >= 0) {
+                localClock.increment(myVcIndex);
+            }
+            clockToSend = localClock.clone();
+        }
+
+        System.out.println("  [VC-Client] Befehl senden: " + action + " | Uhr: " + clockToSend);
+
+        JmsMessage msg = new JmsMessage(clientId, playerId, action, clockToSend, args);
         TextMessage textMessage = session.createTextMessage(msg.toJson());
         commandProducer.send(textMessage);
     }
@@ -187,9 +248,19 @@ public class JmsClient {
             }
         });
 
-        // Request senden
-        JmsMessage msg = JmsMessage.commandWithReply(clientId, playerId, "getState", new int[]{playerId}, tempQueue.getQueueName());
+        // VEKTORUHR: getState sendet die aktuelle lokale Uhr (ohne Inkrementierung — nur Lesebefehl)
+        VectorClock clockToSend;
+        synchronized (localClock) {
+            clockToSend = localClock.clone();
+        }
+
+        // Request mit Vektoruhr und Reply-Queue senden
+        JmsMessage msg = new JmsMessage(clientId, playerId, "getState", clockToSend, new int[]{playerId});
+        // Die Reply-Queue muss als payload (dritter String-Parameter) uebergeben werden
+        // Da commandWithReply die Reply-Queue als payload nutzt, bauen wir die Nachricht manuell:
         TextMessage textMessage = session.createTextMessage(msg.toJson());
+        // Reply-Queue als JMS-Property anhaengen, damit der Server sie findet
+        textMessage.setStringProperty("replyQueue", tempQueue.getQueueName());
         commandProducer.send(textMessage);
 
         // Auf Antwort warten (Timeout: 5 Sekunden)

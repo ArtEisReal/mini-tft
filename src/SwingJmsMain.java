@@ -461,8 +461,11 @@ public class SwingJmsMain extends JFrame implements GameListener {
         SwingUtilities.invokeLater(() -> {
             try {
                 // JMS-Client verbinden
-                JmsClient client = new JmsClient("swing-player-" + playerId);
+                // Vektoruhr-Index: Spieler 0 -> Index 1, Spieler 1 -> Index 2
+                int vcIndex = playerId + 1;
+                JmsClient client = new JmsClient("swing-player-" + playerId, vcIndex);
                 client.connect();
+                System.out.println("  [VC-Client] Vektoruhr-Index: " + vcIndex + " (Spieler " + playerId + ")");
 
                 // GUI erstellen
                 JmsServiceProxy service = new JmsServiceProxy(client);

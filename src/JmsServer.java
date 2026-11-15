@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * JMS-Server fuer Mini-TFT.
@@ -31,6 +32,12 @@ public class JmsServer {
 
     /** Client-ID -> Reply-Queue-Name. */
     private final Map<String, String> clientQueues = new ConcurrentHashMap<>();
+
+    /** Vektoruhr-Manager fuer kausale Abhaengigkeitsverfolgung. */
+    private final VectorClockManager vcManager = new VectorClockManager();
+
+    /** Zaehler fuer die Zuordnung von Clients zu Vektoruhr-Indizes (1 = Spieler 0, 2 = Spieler 1). */
+    private final AtomicInteger nextVcIndex = new AtomicInteger(1);
 
     private GameEngine engine;
     private Connection connection;
@@ -90,7 +97,14 @@ public class JmsServer {
                 try {
                     String json = txtMsg.getText();
                     JmsMessage jmsMsg = JmsMessage.fromJson(json);
-                    handleCommand(jmsMsg);
+                    // Reply-Queue aus JMS-Property extrahieren (fuer getState-Requests)
+                    String replyQueue = null;
+                    try {
+                        replyQueue = txtMsg.getStringProperty("replyQueue");
+                    } catch (JMSException e) {
+                        // keine replyQueue Property
+                    }
+                    handleCommand(jmsMsg, replyQueue);
                 } catch (Exception e) {
                     System.err.println("Fehler beim Verarbeiten des Befehls: " + e.getMessage());
                     e.printStackTrace();
@@ -122,6 +136,7 @@ public class JmsServer {
 
     /**
      * Sendet einen Callback an einen spezifischen Client.
+     * Fuegt die aktuelle Server-Vektoruhr in die Nachricht ein.
      */
     public void sendCallback(String clientId, JmsMessage callback) throws JMSException {
         String replyQueue = clientQueues.get(clientId);
@@ -131,7 +146,17 @@ public class JmsServer {
         }
         Destination dest = session.createQueue(replyQueue);
         MessageProducer producer = session.createProducer(dest);
-        TextMessage textMessage = session.createTextMessage(callback.toJson());
+
+        // Wenn der Callback noch keine Vektoruhr hat, die Server-Uhr eintragen
+        JmsMessage msgToSend;
+        if (callback.vectorClock() == null) {
+            VectorClock serverClock = vcManager.getServerClock();
+            msgToSend = new JmsMessage(clientId, callback.action(), callback.payload(), serverClock);
+        } else {
+            msgToSend = callback;
+        }
+
+        TextMessage textMessage = session.createTextMessage(msgToSend.toJson());
         producer.send(textMessage);
     }
 
@@ -146,17 +171,86 @@ public class JmsServer {
 
     /**
      * Verarbeitet einen eingehenden Befehl.
+     * Integriert Vektoruhr-Validierung und Logging.
+     *
+     * @param msg die eingehende JmsMessage
+     * @param replyQueueName die Reply-Queue aus JMS-Property (fuer getState-Requests), sonst null
      */
-    private void handleCommand(JmsMessage msg) throws Exception {
+    private void handleCommand(JmsMessage msg, String replyQueueName) throws Exception {
         String clientId = msg.clientId();
 
-        // Client beim ersten Befehl registrieren
+        // Client beim ersten Befehl registrieren (Reply-Queue + Vektoruhr)
+        boolean isNewClient = false;
         if (!clientQueues.containsKey(clientId)) {
             registerClient(clientId);
+            isNewClient = true;
+        }
+
+        // Vektoruhr: Client beim ersten Mal registrieren
+        if (isNewClient) {
+            int vcIndex = nextVcIndex.getAndIncrement();
+            vcManager.registerClient(clientId, vcIndex);
         }
 
         int playerId = msg.playerId();
         String action = msg.action();
+
+        // getState ist ein Sonderfall: nur Lesebefehl, keine Vektoruhr-Validierung
+        if ("getState".equals(action)) {
+            System.out.println();
+            System.out.println("  [VC] === GET STATE (Lesebefehl, keine Validierung) ===");
+            System.out.println("  [VC] Von: " + clientId + " | Spieler: " + playerId);
+            handleGetState(clientId, playerId, replyQueueName);
+            System.out.println("  [VC] ===========================");
+            return;
+        }
+
+        // === VEKTORUHR: Vor der Verarbeitung ===
+        VectorClock incomingClock = msg.vectorClock();
+        System.out.println();
+        System.out.println("  [VC] === EINGEHENDE NACHRICHT ===");
+        System.out.println("  [VC] Von: " + clientId + " | Aktion: " + action + " | Spieler: " + playerId);
+        if (incomingClock != null) {
+            System.out.println("  [VC] Client-Uhr (incoming): " + incomingClock
+                    + " [S=" + incomingClock.get(VectorClock.SERVER_INDEX)
+                    + ", P1=" + incomingClock.get(VectorClock.PLAYER_1_INDEX)
+                    + ", P2=" + incomingClock.get(VectorClock.PLAYER_2_INDEX) + "]");
+        } else {
+            System.out.println("  [VC] Client-Uhr: keine (alter Client)");
+        }
+        VectorClock serverBefore = vcManager.getServerClock();
+        System.out.println("  [VC] Server-Uhr (vor):       " + serverBefore
+                + " [S=" + serverBefore.get(VectorClock.SERVER_INDEX)
+                + ", P1=" + serverBefore.get(VectorClock.PLAYER_1_INDEX)
+                + ", P2=" + serverBefore.get(VectorClock.PLAYER_2_INDEX) + "]");
+
+        // === VEKTORUHR: Validierung ===
+        VectorClockManager.ValidationResult validation = vcManager.validate(msg);
+        if (!validation.isAccepted()) {
+            System.out.println("  [VC] ABGELEHNT: " + validation.reason());
+            System.out.println("  [VC] ===========================");
+            // Abgelehnte Nachricht an Client zurueckmelden
+            JmsMessage errorCb = new JmsMessage(clientId, "error",
+                    "Vektoruhr-Validierung fehlgeschlagen: " + validation.reason(),
+                    vcManager.getServerClock());
+            sendCallback(clientId, errorCb);
+            return;
+        }
+
+        // Kausale Beziehung zwischen incoming und Server-Uhr
+        VectorClock.CausalRelation relation = incomingClock.compare(serverBefore);
+        System.out.println("  [VC] Kausale Beziehung: " + relation);
+        if (relation == VectorClock.CausalRelation.CONCURRENT) {
+            System.out.println("  [VC] -> Konkurrente Ereignisse (moeegliche Verzögerung erkannt)");
+        }
+
+        // Server-Uhr nach Validierung aktualisieren
+        VectorClock newServerClock = validation.newServerClock();
+        vcManager.setServerClock(newServerClock);
+        System.out.println("  [VC] Server-Uhr (nach):       " + newServerClock
+                + " [S=" + newServerClock.get(VectorClock.SERVER_INDEX)
+                + ", P1=" + newServerClock.get(VectorClock.PLAYER_1_INDEX)
+                + ", P2=" + newServerClock.get(VectorClock.PLAYER_2_INDEX) + "]");
 
         System.out.println("Befehl von " + clientId + ": " + action + " (Spieler " + playerId + ")");
 
@@ -171,14 +265,17 @@ public class JmsServer {
                 case "levelup" -> engine.levelUp(playerId);
                 case "reroll" -> engine.reroll(playerId);
                 case "ready" -> engine.ready(playerId);
-                case "getState" -> handleGetState(clientId, playerId, msg.payload());
                 default -> System.err.println("Unbekannter Befehl: " + action);
             }
+            System.out.println("  [VC] Befehl erfolgreich verarbeitet.");
         } catch (GameRuleException e) {
             // Regelverletzung (z. B. "nicht dran") als Callback an den Client zuruecksenden
-            JmsMessage errorCallback = new JmsMessage(clientId, "error", e.getMessage());
+            JmsMessage errorCallback = new JmsMessage(clientId, "error", e.getMessage(),
+                    vcManager.getServerClock());
             sendCallback(clientId, errorCallback);
         }
+
+        System.out.println("  [VC] ===========================");
     }
 
     /**
