@@ -26,5 +26,8 @@ public interface GameListener extends Remote {
 
     void onCombatFinished(CombatResultDto result) throws RemoteException;
 
+    /** Der Zug ist an einem anderen Spieler. */
+    void onTurnChanged(int turn) throws RemoteException;
+
     void onGameOver(String winnerName) throws RemoteException;
 }

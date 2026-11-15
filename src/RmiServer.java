@@ -32,7 +32,7 @@ import java.rmi.server.ExportException;
 // AI-GENERATED-END
 public class RmiServer {
     /** Eigene IP-Adresse des Rechners, auf dem der Server läuft. */
-    private static final String DEFAULT_SERVER_HOST = "10.8.3.3";
+    private static final String DEFAULT_SERVER_HOST = "10.8.3.2";
     // AI-GENERATED-START: Konstanten auf RmiConfig umgestellt - 2026-11-02 12:41 CET
     static final int PORT = RmiConfig.REGISTRY_PORT;
     static final String BIND_NAME = RmiConfig.BIND_NAME;

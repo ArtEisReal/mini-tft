@@ -35,6 +35,8 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     private int round = 0;
     private boolean gameOver = false;
     private String winnerName = null;
+    /** Welcher Spieler ist aktuell am Zug (0 oder 1). */
+    private int turn = 0;
     // AI-GENERATED-END
 
     // AI-GENERATED-START: Konstruktoren - fester Export-Port (0 = anonym) als neue Variante, Bestandskonstruktoren delegieren - 2026-11-02 12:41 CET
@@ -203,12 +205,39 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
 
     @Override
     // AI-GENERATED-END
-    public synchronized PlayerDto ready(int playerId) throws GameRuleException, RemoteException {
+    public PlayerDto ready(int playerId) throws GameRuleException, RemoteException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
-        Player p = activePlayer(playerId);
-        p.ready = true;
-        if (players[0].ready && players[1].ready) resolveCombat();
-        return p.toDto(false);
+        Player p;
+        boolean bothReady;
+        int turnValue;
+        PlayerDto result;
+
+        synchronized (this) {
+            p = activePlayer(playerId);
+            p.ready = true;
+            turn = 1 - playerId; // Nächster Spieler ist dran
+            bothReady = players[0].ready && players[1].ready;
+            turnValue = turn;
+            result = p.toDto(false);
+        } // Lock wird hier freigegeben, VOR den Callbacks
+
+        // Callbacks AUSSERHALB des Locks senden, damit Clients getState() aufrufen koennen
+        for (GameListener l : listeners) {
+            try { l.onTurnChanged(turnValue); }
+            catch (RemoteException e) {
+                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+            }
+        }
+        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
+        // Kampf asynchron starten, um Deadlock zu vermeiden:
+        // Die Clients warten auf die ready()-Antwort. Wenn wir resolveCombat() synchron
+        // aufrufen, versuchen die Callbacks (onCombatFrames, onCombatFinished) zurueck
+        // zu den Clients zu gehen, die aber noch auf ready() warten -> Deadlock.
+        if (bothReady) {
+            Thread combatThread = new Thread(this::resolveCombat, "combat");
+            combatThread.start();
+        }
+        return result;
     }
 
     @Override
@@ -217,7 +246,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         Player p = player(playerId);
         Player opp = players[1 - playerId];
-        return new GameStateDto(round, p.toDto(false), opp.toDto(true), gameOver, winnerName);
+        return new GameStateDto(round, p.toDto(false), opp.toDto(true), gameOver, winnerName, turn);
     }
     // AI-GENERATED-END
 
@@ -266,6 +295,7 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
         Player p = player(id);
         if (gameOver) throw new GameRuleException("Das Spiel ist vorbei");
         if (p.ready) throw new GameRuleException("Du bist bereits bereit - warte auf den Gegner");
+        if (id != turn) throw new GameRuleException("Du bist nicht dran — " + players[turn].name + " ist am Zug");
         return p;
     }
 
@@ -354,61 +384,94 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
     }
 
     private void startRound() {
-        round++;
-        for (Player p : players) {
-            p.gold += INCOME;
-            p.ready = false;
-            refillShop(p);
-        }
-        // AI-GENERATED-END
+        // Daten-Updates unter Lock, Callbacks außerhalb (gleiche Strategie wie resolveCombat).
+        int roundNum;
+        int turnPlayer;
+        synchronized (this) {
+            round++;
+            for (Player p : players) {
+                p.gold += INCOME;
+                p.ready = false;
+                refillShop(p);
+            }
+            turn = round % 2; // Abwechselnd Spieler 0 und 1 beginnen
+            roundNum = round;
+            turnPlayer = turn;
+        } // Lock wird hier freigegeben, VOR den Callbacks
+
+        // Callbacks AUSSERHALB des Locks senden
         for (GameListener l : listeners) {
-            try { l.onRoundStarted(round); }
+            try { l.onRoundStarted(roundNum); }
             catch (RemoteException e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
-    // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
+        for (GameListener l : listeners) {
+            try { l.onTurnChanged(turnPlayer); }
+            catch (RemoteException e) {
+                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+            }
+        }
     }
 
     private void resolveCombat() {
-        List<CombatFrameDto> frames = BoardCombat.run(players[0].board, players[1].board,
-                players[0].name, players[1].name);
-        List<String> log = new ArrayList<>();
-        for (CombatFrameDto f : frames) {
-            log.add("--- Tick " + f.tick() + " ---");
-            f.events().forEach(e -> log.add(e.text()));
-        }
+        // Kampf-Simulation und Daten-Updates unter Lock, um Datenrennen zu vermeiden.
+        // Callbacks werden AUSSERHALB des Locks gesendet, damit Clients getState() aufrufen
+        // koennen, ohne vom Kampf-Thread blockiert zu werden (Deadlock-Vermeidung).
+        List<CombatFrameDto> frames;
+        List<String> log;
+        CombatResultDto result;
+        boolean isGameOver;
+        String winner;
 
-        int winner = -1;
-        int alive0 = 0, alive1 = 0;
-        if (!frames.isEmpty()) {
-            for (UnitStateDto u : frames.get(frames.size() - 1).units()) {
-                if (!u.alive()) continue;
-                if (u.team() == 0) alive0++;
-                else alive1++;
+        synchronized (this) {
+            frames = BoardCombat.run(players[0].board, players[1].board,
+                    players[0].name, players[1].name);
+            log = new ArrayList<>();
+            for (CombatFrameDto f : frames) {
+                log.add("--- Tick " + f.tick() + " ---");
+                f.events().forEach(e -> log.add(e.text()));
             }
-        }
-        if (alive0 > 0 && alive1 == 0) winner = 0;
-        else if (alive1 > 0 && alive0 == 0) winner = 1;
 
-        int damage = 0;
-        if (winner >= 0) {
-            int survivors = winner == 0 ? alive0 : alive1;
-            damage = 2 + survivors;
-            players[1 - winner].hp -= damage;
-        }
+            int winnerId = -1;
+            int alive0 = 0, alive1 = 0;
+            if (!frames.isEmpty()) {
+                for (UnitStateDto u : frames.get(frames.size() - 1).units()) {
+                    if (!u.alive()) continue;
+                    if (u.team() == 0) alive0++;
+                    else alive1++;
+                }
+            }
+            if (alive0 > 0 && alive1 == 0) winnerId = 0;
+            else if (alive1 > 0 && alive0 == 0) winnerId = 1;
 
-        // Animation zuerst (Richtung 2: Callback mit den Frames), dann das Ergebnis
-        // AI-GENERATED-END
+            int damage = 0;
+            if (winnerId >= 0) {
+                int survivors = winnerId == 0 ? alive0 : alive1;
+                damage = 2 + survivors;
+                players[1 - winnerId].hp -= damage;
+            }
+
+            result = new CombatResultDto(round, log, winnerId, damage);
+
+            for (Player p : players) {
+                if (p.hp <= 0) {
+                    gameOver = true;
+                    winnerName = players[1 - p.id].name;
+                }
+            }
+            isGameOver = gameOver;
+            winner = winnerName;
+        } // Lock wird hier freigegeben, VOR den Callbacks
+
+        // Callbacks AUSSERHALB des Locks senden — Clients koennen jetzt getState() aufrufen
         for (GameListener l : listeners) {
             try { l.onCombatFrames(round, frames); }
             catch (RemoteException e) {
                 System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
             }
         }
-        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
-        CombatResultDto result = new CombatResultDto(round, log, winner, damage);
-        // AI-GENERATED-END
+
         for (GameListener l : listeners) {
             try { l.onCombatFinished(result); }
             catch (RemoteException e) {
@@ -416,23 +479,15 @@ public class GameEngine extends UnicastRemoteObject implements GameService {
             }
         }
 
-        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
-        for (Player p : players) {
-            if (p.hp <= 0) {
-                gameOver = true;
-                winnerName = players[1 - p.id].name;
-            }
-        }
-        if (gameOver) {
-        // AI-GENERATED-END
+        if (isGameOver) {
             for (GameListener l : listeners) {
-                try { l.onGameOver(winnerName); }
+                try { l.onGameOver(winner); }
                 catch (RemoteException e) {
                     System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
                 }
             }
-        // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         } else {
+            // startRound() ist nicht synchronized und sendet Callbacks ebenfalls außerhalb des Locks
             startRound();
         }
     }

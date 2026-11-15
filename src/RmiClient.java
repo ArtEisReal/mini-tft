@@ -3,6 +3,7 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.ArrayList;
 import java.util.List;
+import javax.swing.SwingUtilities;
 
 // AI-GENERATED-START: Javadoc für Netzwerkbetrieb ergänzt (Host-Property, fester Listener-Port) - 2026-11-02 12:41 CET
 /**
@@ -139,27 +140,59 @@ public class RmiClient {
 
         @Override
         public void onRoundStarted(int round) throws RemoteException {
-            delegate.onRoundStarted(round);
+            final int r = round;
+            SwingUtilities.invokeLater(() -> {
+                try { delegate.onRoundStarted(r); }
+                catch (Exception e) { System.err.println("Callback onRoundStarted fehlgeschlagen: " + e.getMessage()); }
+            });
         }
 
         @Override
         public void onCombatFrames(int round, java.util.List<CombatFrameDto> frames) throws RemoteException {
-            delegate.onCombatFrames(round, frames);
+            final int r = round;
+            final java.util.List<CombatFrameDto> f = frames;
+            SwingUtilities.invokeLater(() -> {
+                try { delegate.onCombatFrames(r, f); }
+                catch (Exception e) { System.err.println("Callback onCombatFrames fehlgeschlagen: " + e.getMessage()); }
+            });
         }
 
         @Override
         public void onUnitCombined(int playerId, String unitName, int star) throws RemoteException {
-            delegate.onUnitCombined(playerId, unitName, star);
+            final int pid = playerId;
+            final String name = unitName;
+            final int s = star;
+            SwingUtilities.invokeLater(() -> {
+                try { delegate.onUnitCombined(pid, name, s); }
+                catch (Exception e) { System.err.println("Callback onUnitCombined fehlgeschlagen: " + e.getMessage()); }
+            });
         }
 
         @Override
         public void onCombatFinished(CombatResultDto result) throws RemoteException {
-            delegate.onCombatFinished(result);
+            final CombatResultDto r = result;
+            SwingUtilities.invokeLater(() -> {
+                try { delegate.onCombatFinished(r); }
+                catch (Exception e) { System.err.println("Callback onCombatFinished fehlgeschlagen: " + e.getMessage()); }
+            });
+        }
+
+        @Override
+        public void onTurnChanged(int turn) throws RemoteException {
+            final int t = turn;
+            SwingUtilities.invokeLater(() -> {
+                try { delegate.onTurnChanged(t); }
+                catch (Exception e) { System.err.println("Callback onTurnChanged fehlgeschlagen: " + e.getMessage()); }
+            });
         }
 
         @Override
         public void onGameOver(String winnerName) throws RemoteException {
-            delegate.onGameOver(winnerName);
+            final String name = winnerName;
+            SwingUtilities.invokeLater(() -> {
+                try { delegate.onGameOver(name); }
+                catch (Exception e) { System.err.println("Callback onGameOver fehlgeschlagen: " + e.getMessage()); }
+            });
         }
 
         void unexport() throws RemoteException {

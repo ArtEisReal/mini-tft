@@ -3,5 +3,5 @@ import java.io.Serializable;
 
 /** DTO: Gesamtzustand aus Sicht eines Spielers. */
 public record GameStateDto(int round, PlayerDto self, PlayerDto opponent,
-                           boolean gameOver, String winnerName) implements Serializable {}
+                           boolean gameOver, String winnerName, int turn) implements Serializable {}
                            // AI-GENERATED-END

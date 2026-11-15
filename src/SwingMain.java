@@ -17,10 +17,19 @@ import java.util.List;
  */
 public class SwingMain extends JFrame implements GameListener {
     /** Eigene IP-Adresse des Client-Rechners. */
-    private static final String DEFAULT_CLIENT_HOST = "10.8.3.3";
+    private static final String DEFAULT_CLIENT_HOST = "10.8.3.2";
     /** IP-Adresse des Rechners, auf dem RmiServer läuft. */
-    private static final String DEFAULT_SERVER_HOST = "10.8.3.3";
-    private static final String[] NAMES = {"Spieler1", "Spieler2"};
+    private static final String DEFAULT_SERVER_HOST = "10.8.3.2";
+
+    /** Name des Spielers nach ID (Hotseat-Modus). */
+    private static final String[] NAMES = {"Spieler 1", "Spieler 2"};
+
+    private final GameService service;
+    private final String serverHost;
+    /** Spieler-ID dieses Clients (RMI-Modus, -1 = Hotseat). */
+    private final int playerId;
+    /** Aktueller Spieler im Hotseat-Modus (nur wenn playerId == -1). */
+    private int current = 0;
     private static final Color[] COST_COLORS = {
             new Color(120, 124, 135),  // Kosten 1
             new Color(54, 150, 92),    // Kosten 2
@@ -33,9 +42,6 @@ public class SwingMain extends JFrame implements GameListener {
     // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
     }
 
-    private final GameService service;
-    private final String serverHost;
-    private int current = 0;
     // AI-GENERATED-START: letzte Kampf-Frames fuer die JSON-Ansicht merken - 2026-11-02 16:05 CET
     private List<CombatFrameDto> lastFrames;
     // AI-GENERATED-END
@@ -52,10 +58,20 @@ public class SwingMain extends JFrame implements GameListener {
     private final JPanel center = new JPanel(cards);
     private final JLabel coverLabel = new JLabel("", SwingConstants.CENTER);
 
+    /** Hotseat-Konstruktor (lokaler Start über Main, kein RMI). */
     public SwingMain(GameService service, String serverHost) {
+        this(service, serverHost, -1);
+    }
+
+    /** RMI-Konstruktor (Netzwerk-Client mit fester Spieler-ID). */
+    public SwingMain(GameService service, String serverHost, int playerId) {
         super("Mini-TFT");
+        if (playerId >= 0) {
+            setTitle("Mini-TFT - Spieler " + playerId);
+        }
         this.service = service;
         this.serverHost = serverHost;
+        this.playerId = playerId;
         setDefaultCloseOperation(EXIT_ON_CLOSE);
         setLayout(new BorderLayout(10, 10));
         ((JComponent) getContentPane()).setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
@@ -75,27 +91,27 @@ public class SwingMain extends JFrame implements GameListener {
         boardPanel.setActions(new BoardPanel.Actions() {
             @Override
             public void onMove(int index, int row, int col) {
-                act(() -> service.move(current, index, row, col));
+                act(() -> service.move(activeId(), index, row, col));
             }
 
             @Override
             public void onToField(int benchSlot, int row, int col) {
-                act(() -> service.toField(current, benchSlot, row, col));
+                act(() -> service.toField(activeId(), benchSlot, row, col));
             }
 
             @Override
             public void onToBench(int index) {
-                act(() -> service.toBench(current, index));
+                act(() -> service.toBench(activeId(), index));
             }
 
             @Override
             public void onSellField(int index) {
-                act(() -> service.sell(current, index));
+                act(() -> service.sell(activeId(), index));
             }
 
             @Override
             public void onSellBench(int benchSlot) {
-                act(() -> service.sellBench(current, benchSlot));
+                act(() -> service.sellBench(activeId(), benchSlot));
             }
         });
         shopPanel.setBorder(BorderFactory.createTitledBorder("Shop (Klick = kaufen, landet auf der Bench)"));
@@ -103,10 +119,10 @@ public class SwingMain extends JFrame implements GameListener {
         areas.add(boardPanel, BorderLayout.CENTER);
         areas.add(shopPanel, BorderLayout.SOUTH);
 
-        rerollBtn.addActionListener(e -> act(() -> service.reroll(current)));
+        rerollBtn.addActionListener(e -> act(() -> service.reroll(activeId())));
         JButton levelBtn = new JButton("Level up (" + GameEngine.LEVEL_COST + " Gold)");
         levelBtn.setToolTipText("Gibt +1 Platz auf dem Feld (max. Level " + GameEngine.MAX_LEVEL + ")");
-        levelBtn.addActionListener(e -> act(() -> service.levelUp(current)));
+        levelBtn.addActionListener(e -> act(() -> service.levelUp(activeId())));
         readyBtn.addActionListener(e -> onReady());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
         buttons.add(rerollBtn);
@@ -117,22 +133,25 @@ public class SwingMain extends JFrame implements GameListener {
         game.add(areas, BorderLayout.CENTER);
         game.add(buttons, BorderLayout.SOUTH);
 
-        // Sichtschutz zwischen den Spielern (Hotseat)
-        JButton continueBtn = new JButton("Weiter");
-        continueBtn.addActionListener(e -> {
-            refresh();
-            cards.show(center, "game");
-        });
-        coverLabel.setFont(coverLabel.getFont().deriveFont(Font.BOLD, 24f));
-        JPanel cover = new JPanel(new GridBagLayout());
-        GridBagConstraints gc = new GridBagConstraints();
-        gc.gridx = 0;
-        gc.insets = new Insets(10, 10, 10, 10);
-        cover.add(coverLabel, gc);
-        cover.add(continueBtn, gc);
-
         center.add(game, "game");
-        center.add(cover, "cover");
+
+        // Sichtschutz zwischen den Spielern (nur im Hotseat-Modus)
+        if (playerId < 0) {
+            JButton continueBtn = new JButton("Weiter");
+            continueBtn.addActionListener(e -> {
+                refresh();
+                cards.show(center, "game");
+            });
+            coverLabel.setFont(coverLabel.getFont().deriveFont(Font.BOLD, 24f));
+            JPanel cover = new JPanel(new GridBagLayout());
+            GridBagConstraints gc = new GridBagConstraints();
+            gc.gridx = 0;
+            gc.insets = new Insets(10, 10, 10, 10);
+            cover.add(coverLabel, gc);
+            cover.add(continueBtn, gc);
+            center.add(cover, "cover");
+        }
+
         add(center, BorderLayout.CENTER);
 
         // Kampflog
@@ -146,7 +165,16 @@ public class SwingMain extends JFrame implements GameListener {
         setSize(1250, 780);
         setLocationRelativeTo(null);
         setJMenuBar(buildMenuBar());
-        showCover();
+        if (playerId >= 0) {
+            setMyHalf();
+        } else {
+            showCover();
+        }
+    }
+
+    /** Gibt die aktive Spieler-ID zurück (playerId im RMI-Modus, current im Hotseat-Modus). */
+    private int activeId() {
+        return playerId >= 0 ? playerId : current;
     }
 
     // ---------- Ablauf ----------
@@ -169,7 +197,7 @@ public class SwingMain extends JFrame implements GameListener {
     private void onReady() {
         msgLabel.setText(" ");
         try {
-            service.ready(current);
+            service.ready(activeId());
         } catch (GameRuleException e) {
             msgLabel.setText(e.getMessage());
             return;
@@ -216,9 +244,19 @@ public class SwingMain extends JFrame implements GameListener {
         cards.show(center, "cover");
     }
 
+    /** Eingabefelder aktivieren/deaktivieren je nachdem, ob ich dran bin (nur RMI-Modus). */
+    private void setMyHalf() {
+        GameStateDto s = state();
+        boolean myTurn = s.turn() == playerId;
+        rerollBtn.setEnabled(myTurn && !s.self().ready());
+        readyBtn.setEnabled(!s.self().ready());
+        boardPanel.setEnabled(myTurn && !s.self().ready());
+        shopPanel.setEnabled(myTurn && !s.self().ready());
+    }
+
     private GameStateDto state() {
         try {
-            return service.getState(current);
+            return service.getState(activeId());
         } catch (GameRuleException e) {
             throw new IllegalStateException(e);
             // AI-GENERATED-END
@@ -232,23 +270,37 @@ public class SwingMain extends JFrame implements GameListener {
         if (combatPlayback) return;
         GameStateDto s = state();
         PlayerDto me = s.self(), op = s.opponent();
-        statusLabel.setText(String.format("Runde %d   |   %s: %d HP, %d Gold, Level %d   |   Feld %d/%d, Bench %d/%d   |   Gegner %s: %d HP, %d aufm Feld   |   Haelfte: %s",
-                s.round(), me.name(), me.hp(), me.gold(), me.level(),
-                me.board().size(), me.level(), me.bench().size(), GameEngine.BENCH_SIZE,
-                op.name(), op.hp(), op.board().size(),
-                current == 0 ? "oben" : "unten"));
+        int active = activeId();
+        if (playerId >= 0) {
+            // RMI-Modus: Turn-Meldung anzeigen
+            boolean myTurn = s.turn() == playerId;
+            String turnMsg = myTurn ? "(du bist dran)" : ("(warte auf " + op.name() + ")");
+            statusLabel.setText(String.format("Runde %d   |   %s: %d HP, %d Gold, Level %d   |   Feld %d/%d, Bench %d/%d   |   Gegner %s: %d HP, %d aufm Feld   |   %s",
+                    s.round(), me.name(), me.hp(), me.gold(), me.level(),
+                    me.board().size(), me.level(), me.bench().size(), GameEngine.BENCH_SIZE,
+                    op.name(), op.hp(), op.board().size(),
+                    turnMsg));
+        } else {
+            // Hotseat-Modus: alte Statuszeile ohne Turn-Meldung
+            statusLabel.setText(String.format("Runde %d   |   %s: %d HP, %d Gold, Level %d   |   Feld %d/%d, Bench %d/%d   |   Gegner %s: %d HP, %d aufm Feld   |   Haelfte: %s",
+                    s.round(), me.name(), me.hp(), me.gold(), me.level(),
+                    me.board().size(), me.level(), me.bench().size(), GameEngine.BENCH_SIZE,
+                    op.name(), op.hp(), op.board().size(),
+                    current == 0 ? "oben" : "unten"));
+        }
 
-        boardPanel.setSetup(current, me.board(), me.bench(), op.board());
+        boardPanel.setSetup(active, me.board(), me.bench(), op.board());
         shopPanel.removeAll();
         for (int i = 0; i < GameEngine.SHOP_SIZE; i++) {
             UnitDto u = i < me.shop().size() ? me.shop().get(i) : null;
             final int slot = i + 1;
             boolean tooExpensive = u != null && me.gold() < u.cost();
             shopPanel.add(new Slot(u, tooExpensive, "Klick: kaufen",
-                    () -> act(() -> service.buy(current, slot))));
+                    () -> act(() -> service.buy(active, slot))));
         }
         shopPanel.revalidate();
         shopPanel.repaint();
+        if (playerId >= 0) setMyHalf();
     }
 
     // ---------- JSON-Nachrichtenformat + Benchmark (Menue) ----------
@@ -259,7 +311,7 @@ public class SwingMain extends JFrame implements GameListener {
 
         JMenu view = new JMenu("Ansicht");
         JMenuItem jsonState = new JMenuItem("Spielstand als JSON ...");
-        jsonState.setToolTipText("getStateJson(current) - Server marshallt, Client zeigt den Rohtext");
+        jsonState.setToolTipText("getStateJson(activeId) - Server marshallt, Client zeigt den Rohtext");
         jsonState.addActionListener(e -> showJsonState());
         view.add(jsonState);
 
@@ -289,7 +341,7 @@ public class SwingMain extends JFrame implements GameListener {
         msgLabel.setText(" ");
         try {
             showTextDialog("Spielstand als JSON (Server -> Client)",
-                    service.getStateJson(current));
+                    service.getStateJson(activeId()));
         } catch (GameRuleException | RemoteException e) {
             msgLabel.setText("JSON nicht verfuegbar: " + e.getMessage());
         }
@@ -319,7 +371,7 @@ public class SwingMain extends JFrame implements GameListener {
         try {
             // Command-Pattern: parse() validiert Name und Argumente der Eingabe
             Command.parse(line);
-            String request = JsonMapper.commandJson(line, current);
+            String request = JsonMapper.commandJson(line, activeId());
             String response = service.executeJson(request);
             PlayerDto p = JsonMapper.toPlayer(response);
             showTextDialog("JSON-Roundtrip (Client -> Server -> Client)",
@@ -401,17 +453,40 @@ public class SwingMain extends JFrame implements GameListener {
     public void onCombatFinished(CombatResultDto r) {
         logArea.append("\n##### KAMPF Runde " + r.round() + " #####\n");
         r.log().forEach(line -> logArea.append(line + "\n"));
-        logArea.append(r.winnerId() < 0 ? "Unentschieden!\n\n"
-                : "Sieger: " + NAMES[r.winnerId()] + " (Gegner verliert " + r.damage() + " HP)\n\n");
+        String winnerName;
+        if (r.winnerId() < 0) {
+            winnerName = "Unentschieden!";
+        } else if (playerId >= 0) {
+            // RMI-Modus: Namen aus dem Server-Zustand holen
+            GameStateDto st = state();
+            winnerName = r.winnerId() == playerId ? st.self().name() : st.opponent().name();
+        } else {
+            // Hotseat-Modus: Namen aus dem Array holen
+            winnerName = NAMES[r.winnerId()];
+        }
+        logArea.append(winnerName + (r.winnerId() < 0 ? "" : " (Gegner verliert " + r.damage() + " HP)") + "\n\n");
         logArea.setCaretPosition(logArea.getDocument().getLength());
     }
 
     @Override
     // AI-GENERATED-END
-    public void onUnitCombined(int playerId, String unitName, int star) throws RemoteException {
+    public void onUnitCombined(int combinedPlayerId, String unitName, int star) throws RemoteException {
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
-        logArea.append("*** " + NAMES[playerId] + ": 3x " + unitName + " vereinigt -> "
+        String playerName;
+        if (this.playerId >= 0) {
+            // RMI-Modus: Namen aus dem Server-Zustand holen
+            playerName = combinedPlayerId == this.playerId ? state().self().name() : state().opponent().name();
+        } else {
+            // Hotseat-Modus: Namen aus dem Array holen
+            playerName = NAMES[combinedPlayerId];
+        }
+        logArea.append("*** " + playerName + ": 3x " + unitName + " vereinigt -> "
                 + UnitDto.starLabel(unitName, star) + " ***\n");
+    }
+
+    @Override
+    public void onTurnChanged(int turn) {
+        refresh();
     }
 
     @Override
@@ -505,6 +580,17 @@ public class SwingMain extends JFrame implements GameListener {
         String host = args.length > 0 ? args[0] : DEFAULT_SERVER_HOST;
         // AI-GENERATED-END
 
+        // Spieler-ID: zweites Argument (0 oder 1), Standard 0
+        int parsedPlayerId = 0;
+        if (args.length > 1) {
+            try {
+                parsedPlayerId = Integer.parseInt(args[1]);
+            } catch (NumberFormatException e) {
+                System.err.println("Ungueltige Spieler-ID: " + args[1] + " - verwende Standard 0");
+            }
+        }
+        final int playerId = parsedPlayerId;
+
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         SwingUtilities.invokeLater(() -> {
         // AI-GENERATED-END
@@ -514,8 +600,8 @@ public class SwingMain extends JFrame implements GameListener {
                 client.connect();
                 GameService service = client.getService();
 
-                // GUI erstellen
-                SwingMain ui = new SwingMain(service, host);
+                // GUI erstellen (mit Spieler-ID)
+                SwingMain ui = new SwingMain(service, host, playerId);
 
                 // Listener beim Server registrieren (bidirektionale Kommunikation)
                 client.registerListener(ui);

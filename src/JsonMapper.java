@@ -204,7 +204,8 @@ public final class JsonMapper {
                 toPlayer(o.getJsonObject("self")),
                 toPlayer(o.getJsonObject("opponent")),
                 o.getBoolean("gameOver"),
-                o.isNull("winnerName") ? null : o.getString("winnerName"));
+                o.isNull("winnerName") ? null : o.getString("winnerName"),
+                o.containsKey("turn") ? o.getInt("turn") : 0);
     }
 
     public static PlayerDto toPlayer(String json) {
