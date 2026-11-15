@@ -59,6 +59,18 @@ public class VectorClockManager {
     }
 
     /**
+     * Setzt die erwartete Uhr eines Clients zurueck (z.B. nach einem Reconnect
+     * oder Neustart des GUI-Clients). Der Index bleibt dabei erhalten.
+     */
+    public void resetClient(String clientId, int playerIndex) {
+        VectorClock initialClock = new VectorClock();
+        clientExpectedClocks.put(clientId, initialClock);
+        clientIndices.put(clientId, playerIndex);
+        System.out.println("  [VC] Neue Client-Session: " + clientId + " -> Index " + playerIndex
+                + ", erwartete Uhr zurueckgesetzt auf [0,0,0]");
+    }
+
+    /**
      * Liefert den gespeicherten Index eines Clients.
      */
     public Integer getClientIndex(String clientId) {
@@ -109,10 +121,15 @@ public class VectorClockManager {
         }
 
         // REGEL 2: Max-Step-Pruefung (Anti-Speedhack)
-        // Der Client darf seine eigene Uhr nur um genau +1 erhoehen
-        if (incomingOwnTick > expectedOwnTick + 1) {
+        // Der Client darf seine eigene Uhr pro Nachricht nur um +1 erhoehen.
+        // Ein frisch verbundener Client kann seine Uhr aber bereits durch das
+        // Mergen von Server-Callbacks auf den Server-Stand gebracht haben
+        // (Reconnect oder Beitritt mitten im Spiel). Erlaubt ist daher
+        // hoechstens der dem Server bekannte Stand + 1.
+        int knownOwnTick = Math.max(expectedOwnTick, serverClock.get(clientIndex));
+        if (incomingOwnTick > knownOwnTick + 1) {
             return ValidationResult.reject(clientId,
-                    "Max-Step-Verletzung: Client " + clientId + " springt von Tick " + expectedOwnTick
+                    "Max-Step-Verletzung: Client " + clientId + " springt von Tick " + knownOwnTick
                     + " auf " + incomingOwnTick + " (erlaubt: nur +1)");
         }
 

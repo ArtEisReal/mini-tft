@@ -35,6 +35,18 @@ public class JmsClient {
     private final AtomicBoolean closed = new AtomicBoolean(false);
 
     /**
+     * ID dieser Client-Session. Jeder Programmstart bekommt eine neue Session,
+     * damit der Server die Vektoruhr nach einem Reconnect zuruecksetzen kann
+     * und keine alten Callbacks aus einer frueheren Session zugestellt werden.
+     */
+    private final String sessionId = UUID.randomUUID().toString();
+
+    /** Name der session-eigenen Reply-Queue (verhindert das Replay alter Nachrichten). */
+    private String sessionReplyQueue() {
+        return JmsConfig.REPLY_QUEUE_PREFIX + clientId + "/" + sessionId;
+    }
+
+    /**
      * Lokale Vektoruhr des Clients: [Server_Tick, P1_Tick, P2_Tick].
      * Wird bei jedem gesendeten Befehl inkrementiert und bei empfangenen
      * Callbacks mit der Server-Uhr verschmolzen.
@@ -90,8 +102,8 @@ public class JmsClient {
         Destination commandQueue = session.createQueue(JmsConfig.COMMAND_QUEUE);
         commandProducer = session.createProducer(commandQueue);
 
-        // Consumer fuer Callbacks (Server -> Client, eigene Reply-Queue)
-        Destination replyQueue = session.createQueue(JmsConfig.replyQueue(clientId));
+        // Consumer fuer Callbacks (Server -> Client, session-eigene Reply-Queue)
+        Destination replyQueue = session.createQueue(sessionReplyQueue());
         callbackConsumer = session.createConsumer(replyQueue);
 
         // Callback-Handler: JmsMessage -> GameListener
@@ -131,7 +143,7 @@ public class JmsClient {
         connection.start();
         System.out.println("JMS-Client verbunden (ID: " + clientId + ")");
         System.out.println("  Befehle -> " + JmsConfig.COMMAND_QUEUE);
-        System.out.println("  Callbacks <- " + JmsConfig.replyQueue(clientId));
+        System.out.println("  Callbacks <- " + sessionReplyQueue());
     }
 
     /**
@@ -167,6 +179,7 @@ public class JmsClient {
 
         JmsMessage msg = new JmsMessage(clientId, playerId, action, clockToSend, args);
         TextMessage textMessage = session.createTextMessage(msg.toJson());
+        textMessage.setStringProperty("sessionId", sessionId);
         commandProducer.send(textMessage);
     }
 
@@ -261,6 +274,7 @@ public class JmsClient {
         TextMessage textMessage = session.createTextMessage(msg.toJson());
         // Reply-Queue als JMS-Property anhaengen, damit der Server sie findet
         textMessage.setStringProperty("replyQueue", tempQueue.getQueueName());
+        textMessage.setStringProperty("sessionId", sessionId);
         commandProducer.send(textMessage);
 
         // Auf Antwort warten (Timeout: 5 Sekunden)
@@ -362,6 +376,17 @@ public class JmsClient {
                 }
                 case "error" -> {
                     String errorMessage = msg.payload();
+                    // Wurde der Befehl wegen der Vektoruhr abgelehnt, die eigene Uhr
+                    // auf den Serverstand ziehen. Sonst bleibt der Client dauerhaft
+                    // blockiert, weil jeder weitere Befehl erneut abgelehnt wird.
+                    if (errorMessage != null && errorMessage.contains("Vektoruhr")
+                            && msg.vectorClock() != null && myVcIndex >= 0) {
+                        synchronized (localClock) {
+                            int serverTick = msg.vectorClock().get(myVcIndex);
+                            localClock.getInternalTicks()[myVcIndex] = serverTick;
+                            System.out.println("  [VC-Client] Resync nach Ablehnung: eigener Tick -> " + serverTick);
+                        }
+                    }
                     SwingUtilities.invokeLater(() -> {
                         try {
                             javax.swing.JOptionPane.showMessageDialog(

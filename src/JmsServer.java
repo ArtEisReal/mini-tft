@@ -33,6 +33,9 @@ public class JmsServer {
     /** Client-ID -> Reply-Queue-Name. */
     private final Map<String, String> clientQueues = new ConcurrentHashMap<>();
 
+    /** Client-ID -> Session-ID der aktuell verbundenen Instanz (erkennt Reconnects). */
+    private final Map<String, String> clientSessions = new ConcurrentHashMap<>();
+
     /** Vektoruhr-Manager fuer kausale Abhaengigkeitsverfolgung. */
     private final VectorClockManager vcManager = new VectorClockManager();
 
@@ -99,12 +102,18 @@ public class JmsServer {
                     JmsMessage jmsMsg = JmsMessage.fromJson(json);
                     // Reply-Queue aus JMS-Property extrahieren (fuer getState-Requests)
                     String replyQueue = null;
+                    String sessionId = null;
                     try {
                         replyQueue = txtMsg.getStringProperty("replyQueue");
                     } catch (JMSException e) {
                         // keine replyQueue Property
                     }
-                    handleCommand(jmsMsg, replyQueue);
+                    try {
+                        sessionId = txtMsg.getStringProperty("sessionId");
+                    } catch (JMSException e) {
+                        // keine sessionId Property (alter Client)
+                    }
+                    handleCommand(jmsMsg, replyQueue, sessionId);
                 } catch (Exception e) {
                     System.err.println("Fehler beim Verarbeiten des Befehls: " + e.getMessage());
                     e.printStackTrace();
@@ -117,12 +126,15 @@ public class JmsServer {
     }
 
     /**
-     * Registriert einen neuen Client mit seiner Reply-Queue.
+     * Registriert einen neuen Client mit seiner session-eigenen Reply-Queue.
      * Wird automatisch beim ersten Befehl eines Clients aufgerufen.
      */
-    public void registerClient(String clientId) {
-        String replyQueue = JmsConfig.replyQueue(clientId);
+    public void registerClient(String clientId, String sessionId) {
+        String replyQueue = (sessionId != null && !sessionId.isBlank())
+                ? JmsConfig.REPLY_QUEUE_PREFIX + clientId + "/" + sessionId
+                : JmsConfig.replyQueue(clientId);
         clientQueues.put(clientId, replyQueue);
+        if (sessionId != null) clientSessions.put(clientId, sessionId);
         System.out.println("Client registriert: " + clientId + " -> " + replyQueue);
     }
 
@@ -147,11 +159,14 @@ public class JmsServer {
         Destination dest = session.createQueue(replyQueue);
         MessageProducer producer = session.createProducer(dest);
 
-        // Wenn der Callback noch keine Vektoruhr hat, die Server-Uhr eintragen
+        // Wenn der Callback noch keine Vektoruhr hat, die Server-Uhr eintragen.
+        // Dabei muessen playerId und args erhalten bleiben (sonst schlagen
+        // Callbacks mit Argumenten wie onRoundStarted/onTurnChanged fehl).
         JmsMessage msgToSend;
         if (callback.vectorClock() == null) {
             VectorClock serverClock = vcManager.getServerClock();
-            msgToSend = new JmsMessage(clientId, callback.action(), callback.payload(), serverClock);
+            msgToSend = JmsMessage.callback(clientId, callback.playerId(), callback.action(),
+                    callback.args(), callback.payload(), serverClock);
         } else {
             msgToSend = callback;
         }
@@ -176,23 +191,31 @@ public class JmsServer {
      * @param msg die eingehende JmsMessage
      * @param replyQueueName die Reply-Queue aus JMS-Property (fuer getState-Requests), sonst null
      */
-    private void handleCommand(JmsMessage msg, String replyQueueName) throws Exception {
+    private void handleCommand(JmsMessage msg, String replyQueueName, String sessionId) throws Exception {
         String clientId = msg.clientId();
-
-        // Client beim ersten Befehl registrieren (Reply-Queue + Vektoruhr)
-        boolean isNewClient = false;
-        if (!clientQueues.containsKey(clientId)) {
-            registerClient(clientId);
-            isNewClient = true;
-        }
-
-        // Vektoruhr: Client beim ersten Mal registrieren
-        if (isNewClient) {
-            int vcIndex = nextVcIndex.getAndIncrement();
-            vcManager.registerClient(clientId, vcIndex);
-        }
-
         int playerId = msg.playerId();
+
+        // Client beim ersten Befehl oder bei einer neuen Session registrieren.
+        // Eine neue Session (z.B. GUI-Neustart) setzt die erwartete Vektoruhr
+        // zurueck, damit der frische Client nicht als "Time Freezing" abgelehnt wird.
+        boolean isNewClient = !clientQueues.containsKey(clientId);
+        boolean isNewSession = sessionId != null
+                && !sessionId.equals(clientSessions.get(clientId));
+
+        if (isNewClient || isNewSession) {
+            registerClient(clientId, sessionId);
+            // Der Index muss zum Spieler passen (Spieler 0 -> 1, Spieler 1 -> 2),
+            // nicht zur Verbindungsreihenfolge.
+            int vcIndex = (playerId >= 0 && playerId <= 1)
+                    ? playerId + 1
+                    : nextVcIndex.getAndIncrement();
+            if (isNewClient) {
+                vcManager.registerClient(clientId, vcIndex);
+            } else {
+                vcManager.resetClient(clientId, vcIndex);
+            }
+        }
+
         String action = msg.action();
 
         // getState ist ein Sonderfall: nur Lesebefehl, keine Vektoruhr-Validierung

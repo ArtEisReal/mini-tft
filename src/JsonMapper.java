@@ -57,6 +57,7 @@ public final class JsonMapper {
                 .add("round", s.round())
                 .add("gameOver", s.gameOver())
                 .add("winnerName", s.winnerName() == null ? JsonValue.NULL : Json.createValue(s.winnerName()))
+                .add("turn", s.turn())
                 .add("self", toJson(s.self()))
                 .add("opponent", toJson(s.opponent()))
                 .build();
