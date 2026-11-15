@@ -163,6 +163,7 @@ public class JmsClient {
 
     // ---------- Spielbefehle (Client -> Server) ----------
 
+    // AI-GENERATED-START: Verzoegerte Befehle ueber ActiveMQ-Scheduler (Delayed Delivery) - 2026-11-15 CET
     private void sendCommand(String action, int playerId, int... args) throws JMSException {
         sendCommandInternal(action, playerId, 0L, args);
     }
@@ -185,6 +186,7 @@ public class JmsClient {
     public void buyDelayed(int playerId, int slot, long delayMs) throws JMSException {
         sendCommandDelayed("buy", delayMs, playerId, slot);
     }
+    // AI-GENERATED-END
 
     private void sendCommandInternal(String action, int playerId, long delayMs, int... args) throws JMSException {
         if (closed.get()) throw new java.lang.IllegalStateException("Client ist geschlossen");
@@ -204,7 +206,9 @@ public class JmsClient {
 
         JmsMessage msg = new JmsMessage(clientId, playerId, action, clockToSend, args);
         TextMessage textMessage = session.createTextMessage(msg.toJson());
+        // AI-GENERATED-START: Correlation-ID und beschreibende JMS-Properties - 2026-11-15 CET
         attachCommandProperties(textMessage, action, playerId, clockToSend, delayMs);
+        // AI-GENERATED-END
         commandProducer.send(textMessage);
     }
 
@@ -212,6 +216,7 @@ public class JmsClient {
         sendCommand("buy", playerId, slot);
     }
 
+    // AI-GENERATED-START: JMS-Properties inkl. AMQ_SCHEDULED_DELAY und Correlation-ID - 2026-11-15 CET
     /**
      * Setzt aussagekraeftige JMS-Properties, damit die ActiveMQ-Web-Konsole
      * Aktion, Spieler, Vektoruhr und Correlation-ID direkt anzeigen kann.
@@ -231,6 +236,7 @@ public class JmsClient {
             textMessage.setLongProperty("AMQ_SCHEDULED_DELAY", delayMs);
         }
     }
+    // AI-GENERATED-END
 
     public void sell(int playerId, int index) throws JMSException {
         sendCommand("sell", playerId, index);
@@ -278,6 +284,7 @@ public class JmsClient {
     public GameStateDto getState(int playerId) throws JMSException, InterruptedException, java.lang.IllegalStateException {
         if (closed.get()) throw new java.lang.IllegalStateException("Client ist geschlossen");
 
+        // AI-GENERATED-START: Request/Reply mit Correlation-ID-Selektor - 2026-11-15 CET
         // Request/Reply: temporaere Queue + Correlation-ID (JMS-Standardmuster).
         TemporaryQueue tempQueue = session.createTemporaryQueue();
         String correlationId = UUID.randomUUID().toString();
@@ -285,6 +292,7 @@ public class JmsClient {
         // Consumer filtert per Correlation-ID-Selektor auf genau diese Antwort.
         MessageConsumer tempConsumer = session.createConsumer(tempQueue,
                 "JMSCorrelationID = '" + correlationId + "'");
+        // AI-GENERATED-END
 
         // Antwort-Container
         final Object[] result = new Object[1];
@@ -316,6 +324,7 @@ public class JmsClient {
             clockToSend = localClock.clone();
         }
 
+        // AI-GENERATED-START: Reply-Queue, Correlation-ID und Properties fuer getState - 2026-11-15 CET
         // Request mit Vektoruhr, JMSReplyTo und JMSCorrelationID senden
         JmsMessage msg = new JmsMessage(clientId, playerId, "getState", clockToSend, new int[]{playerId});
         TextMessage textMessage = session.createTextMessage(msg.toJson());
@@ -328,6 +337,7 @@ public class JmsClient {
         textMessage.setStringProperty("correlationId", correlationId);
         if (clockToSend != null) textMessage.setStringProperty("vectorClock", clockToSend.toJson());
         commandProducer.send(textMessage);
+        // AI-GENERATED-END
 
         // Auf Antwort warten (Timeout: 5 Sekunden)
         boolean received = latch.await(5, java.util.concurrent.TimeUnit.SECONDS);
@@ -426,12 +436,14 @@ public class JmsClient {
                         catch (Exception e) { System.err.println("Callback onGameOver: " + e.getMessage()); }
                     });
                 }
+                // AI-GENERATED-START: Callback onStateRefresh nach Rewind/Replay - 2026-11-15 CET
                 case "onStateRefresh" -> {
                     SwingUtilities.invokeLater(() -> {
                         try { listener.onStateRefresh(); }
                         catch (Exception e) { System.err.println("Callback onStateRefresh: " + e.getMessage()); }
                     });
                 }
+                // AI-GENERATED-END
                 case "error" -> {
                     String errorMessage = msg.payload();
                     // Wurde der Befehl wegen der Vektoruhr abgelehnt, die eigene Uhr

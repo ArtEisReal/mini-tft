@@ -37,7 +37,9 @@ public class GameEngine implements GameService {
     private String winnerName = null;
     /** Welcher Spieler ist aktuell am Zug (0 oder 1). */
     private int turn = 0;
+    // AI-GENERATED-END
 
+    // AI-GENERATED-START: Replay-/Kampfstatus fuer Verzoegerungskompensation - 2026-11-15 CET
     /**
      * Waehrend eines Replays (Verzoegerungskompensation) duerfen keine
      * Callbacks an die Clients gesendet werden. Der Server schickt am Ende
@@ -333,6 +335,7 @@ public class GameEngine implements GameService {
             result = p.toDto(false);
         } // Lock wird hier freigegeben, VOR den Callbacks
 
+        // AI-GENERATED-START: Replay-Modus unterdrueckt Client-Callbacks - 2026-11-15 CET
         // Callbacks AUSSERHALB des Locks senden, damit Clients getState() aufrufen koennen.
         // Im Replay-Modus (Verzoegerungskompensation) werden sie unterdrueckt.
         if (!replaying) {
@@ -343,6 +346,7 @@ public class GameEngine implements GameService {
                 }
             }
         }
+        // AI-GENERATED-END
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
         // Kampf asynchron starten, um Deadlock zu vermeiden:
         // Die Clients warten auf die ready()-Antwort. Wenn wir resolveCombat() synchron
@@ -351,12 +355,14 @@ public class GameEngine implements GameService {
         // Waehrend eines Replays laeuft der Kampf synchron, weil ohnehin keine
         // Callbacks gesendet werden duerfen (sonst Deadlock-Gefahr wie oben).
         if (bothReady) {
+            // AI-GENERATED-START: Kampf im Replay synchron ausfuehren - 2026-11-15 CET
             if (replaying) {
                 resolveCombat();
             } else {
                 Thread combatThread = new Thread(this::resolveCombat, "combat");
                 combatThread.start();
             }
+            // AI-GENERATED-END
         }
         return result;
     }
@@ -486,6 +492,7 @@ public class GameEngine implements GameService {
                         removeAnywhere(p, c);
                         merged = true;
                         // AI-GENERATED-END
+                        // AI-GENERATED-START: Im Replay-Modus keine Unit-Callbacks senden - 2026-11-15 CET
                         // Im Replay-Modus keine Callbacks senden.
                         if (!replaying) {
                             for (GameListener l : listeners) {
@@ -495,6 +502,7 @@ public class GameEngine implements GameService {
                                 }
                             }
                         }
+                        // AI-GENERATED-END
                         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
                         break outer;
                     }
@@ -523,6 +531,7 @@ public class GameEngine implements GameService {
             turnPlayer = turn;
         } // Lock wird hier freigegeben, VOR den Callbacks
 
+        // AI-GENERATED-START: Replay-Modus unterdrueckt Runden-Callbacks - 2026-11-15 CET
         // Callbacks AUSSERHALB des Locks senden
         if (!replaying) {
             for (GameListener l : listeners) {
@@ -538,8 +547,10 @@ public class GameEngine implements GameService {
                 }
             }
         }
+        // AI-GENERATED-END
     }
 
+    // AI-GENERATED-START: Kampfstatus tracken, damit waehrend eines Kampfes nicht zurueckgespult wird - 2026-11-15 CET
     private void resolveCombat() {
         combatRunning = true;
         try {
@@ -548,6 +559,7 @@ public class GameEngine implements GameService {
             combatRunning = false;
         }
     }
+    // AI-GENERATED-END
 
     private void resolveCombatInternal() {
         // Kampf-Simulation und Daten-Updates unter Lock, um Datenrennen zu vermeiden.
@@ -599,6 +611,7 @@ public class GameEngine implements GameService {
             winner = winnerName;
         } // Lock wird hier freigegeben, VOR den Callbacks
 
+        // AI-GENERATED-START: Replay-Modus unterdrueckt Kampf-Callbacks, ein Refresh am Ende - 2026-11-15 CET
         // Callbacks AUSSERHALB des Locks senden — Clients koennen jetzt getState() aufrufen.
         // Im Replay-Modus werden sie unterdrueckt; der Server sendet danach genau
         // einen onStateRefresh an alle Clients.
@@ -626,6 +639,7 @@ public class GameEngine implements GameService {
                 }
             }
         }
+        // AI-GENERATED-END
         if (!isGameOver) {
             // startRound() ist nicht synchronized und sendet Callbacks ebenfalls außerhalb des Locks
             startRound();

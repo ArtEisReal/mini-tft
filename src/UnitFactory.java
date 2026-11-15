@@ -1,4 +1,4 @@
-// AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
+// AI-GENERATED-START: Bestandsdatei fuer Verzoegerungskompensation ueberarbeitet (deterministischer RNG, instanzlokale Unit-IDs) - 2026-11-15 CET
 import java.util.List;
 import java.util.Random;
 

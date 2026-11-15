@@ -29,10 +29,12 @@ public interface GameListener {
 
     void onGameOver(String winnerName);
 
+    // AI-GENERATED-START: Callback fuer Zustands-Refresh nach Rewind/Replay - 2026-11-15 CET
     /**
      * Der Server hat den Spielzustand nach einer Verzoegerungskompensation
      * (Rewind + Replay) korrigiert. Clients sollen ihren Zustand neu laden.
      * Default-Methode, damit bestehende Listener (RMI/lokal) unveraendert bleiben.
      */
     default void onStateRefresh() {}
+    // AI-GENERATED-END
 }

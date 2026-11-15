@@ -23,7 +23,9 @@ public class SwingJmsMain extends JFrame implements GameListener {
     private static final String[] NAMES = {"Spieler 0", "Spieler 1"};
 
     private final JmsClient client;
+    // AI-GENERATED-START: Client-Stub statt GUI-internem Proxy - 2026-11-15 CET
     private final JmsGameServiceStub service;
+    // AI-GENERATED-END
     /** Spieler-ID dieses Clients (0 oder 1). */
     private final int playerId;
 
@@ -46,7 +48,9 @@ public class SwingJmsMain extends JFrame implements GameListener {
     private final JPanel shopPanel = new JPanel(new GridLayout(1, GameEngine.SHOP_SIZE, 10, 10));
     private final JTextArea logArea = new JTextArea();
     private final JButton rerollBtn = new JButton("Reroll (" + GameEngine.REROLL_COST + " Gold)");
+    // AI-GENERATED-START: Button fuer Delayed-Delivery-Demo - 2026-11-15 CET
     private final JButton delayedBuyBtn = new JButton("Kaufen Slot 1 (" + (JmsConfig.DEMO_DELAY_MS / 1000) + " s verzögert)");
+    // AI-GENERATED-END
     private final JButton readyBtn = new JButton("Fertig / Kampf starten");
 
     /**
@@ -56,7 +60,9 @@ public class SwingJmsMain extends JFrame implements GameListener {
      * @param service   das GameService-Proxy-Objekt (muss JMS-Befehle weiterleiten)
      * @param playerId  die Spieler-ID (0 oder 1)
      */
+    // AI-GENERATED-START: GUI nutzt JmsGameServiceStub - 2026-11-15 CET
     public SwingJmsMain(JmsClient client, JmsGameServiceStub service, int playerId) {
+        // AI-GENERATED-END
         super("Mini-TFT (JMS) - Spieler " + playerId);
         this.client = client;
         this.service = service;
