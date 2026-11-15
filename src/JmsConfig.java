@@ -28,6 +28,15 @@ public final class JmsConfig {
     /** Reply-Queue-Prefix fuer einzelne Clients (jeder Client bekommt eine eigene Reply-Queue). */
     public static final String REPLY_QUEUE_PREFIX = "mini-tft/reply/";
 
+    /**
+     * Maximale Luecke in der Client-Vektoruhr, die noch als "verspaetete
+     * Nachricht" akzeptiert wird. Groessere Spruenge gelten als Manipulation.
+     */
+    public static final int MAX_GAP = 10;
+
+    /** Verzoegerung fuer die Demo "Kaufen (3 s verzoegert)" in Millisekunden. */
+    public static final long DEMO_DELAY_MS = 3000L;
+
     private JmsConfig() {}
 
     /**

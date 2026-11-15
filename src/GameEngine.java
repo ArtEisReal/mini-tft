@@ -37,6 +37,16 @@ public class GameEngine implements GameService {
     private String winnerName = null;
     /** Welcher Spieler ist aktuell am Zug (0 oder 1). */
     private int turn = 0;
+
+    /**
+     * Waehrend eines Replays (Verzoegerungskompensation) duerfen keine
+     * Callbacks an die Clients gesendet werden. Der Server schickt am Ende
+     * genau einen onStateRefresh-Callback.
+     */
+    private volatile boolean replaying = false;
+
+    /** Laeuft gerade ein asynchroner Kampf? Dann darf nicht zurueckgespult werden. */
+    private volatile boolean combatRunning = false;
     // AI-GENERATED-END
 
     // AI-GENERATED-START: Konstruktoren - Bestandskonstruktoren delegieren - 2026-11-02 12:41 CET
@@ -57,6 +67,115 @@ public class GameEngine implements GameService {
     protected GameEngine(String name0, String name1, UnitFactory factory) {
         this.factory = factory;
         players = new Player[] {new Player(0, name0), new Player(1, name1)};
+    }
+    // AI-GENERATED-END
+
+    // AI-GENERATED-START: Snapshots fuer Verzoegerungskompensation (Rewind/Replay) - 2026-11-15 CET
+    /**
+     * Tiefe Kopie des kompletten Spielzustands. Wird vor jedem Befehl erzeugt,
+     * damit der Server bei einer verspaeteten Nachricht auf den frueheren
+     * Zustand zurueckspulen und die spaeteren Befehle erneut ausfuehren kann.
+     */
+    public static final class Snapshot {
+        private final int round;
+        private final int turn;
+        private final boolean gameOver;
+        private final String winnerName;
+        private final PlayerSnapshot[] players;
+        private final long rngState;
+        private final int nextUnitId;
+
+        private Snapshot(int round, int turn, boolean gameOver, String winnerName,
+                         Player[] players, UnitFactory factory) {
+            this.round = round;
+            this.turn = turn;
+            this.gameOver = gameOver;
+            this.winnerName = winnerName;
+            this.players = new PlayerSnapshot[players.length];
+            for (int i = 0; i < players.length; i++) {
+                this.players[i] = new PlayerSnapshot(players[i]);
+            }
+            this.rngState = factory.rngState();
+            this.nextUnitId = factory.nextId();
+        }
+    }
+
+    private static final class PlayerSnapshot {
+        private final int id;
+        private final String name;
+        private final int hp;
+        private final int gold;
+        private final int level;
+        private final boolean ready;
+        private final List<Unit> board;
+        private final List<Unit> bench;
+        private final List<Unit> shop;
+
+        private PlayerSnapshot(Player p) {
+            this.id = p.id;
+            this.name = p.name;
+            this.hp = p.hp;
+            this.gold = p.gold;
+            this.level = p.level;
+            this.ready = p.ready;
+            this.board = copyUnits(p.board);
+            this.bench = copyUnits(p.bench);
+            this.shop = copyUnits(p.shop);
+        }
+
+        private static List<Unit> copyUnits(List<Unit> units) {
+            List<Unit> copy = new ArrayList<>(units.size());
+            for (Unit u : units) copy.add(u.copy());
+            return copy;
+        }
+    }
+
+    /** Erzeugt einen Snapshot des aktuellen Zustands (unter dem Engine-Lock). */
+    public synchronized Snapshot snapshot() {
+        return new Snapshot(round, turn, gameOver, winnerName, players, factory);
+    }
+
+    /** Stellt einen frueheren Zustand wieder her (unter dem Engine-Lock). */
+    public synchronized void restore(Snapshot snapshot) {
+        this.round = snapshot.round;
+        this.turn = snapshot.turn;
+        this.gameOver = snapshot.gameOver;
+        this.winnerName = snapshot.winnerName;
+        for (int i = 0; i < players.length; i++) {
+            Player p = players[i];
+            PlayerSnapshot s = snapshot.players[i];
+            p.hp = s.hp;
+            p.gold = s.gold;
+            p.level = s.level;
+            p.ready = s.ready;
+            p.board.clear();
+            for (Unit u : s.board) p.board.add(u.copy());
+            p.bench.clear();
+            for (Unit u : s.bench) p.bench.add(u.copy());
+            p.shop.clear();
+            for (Unit u : s.shop) p.shop.add(u.copy());
+        }
+        factory.restoreRng(snapshot.rngState);
+        factory.restoreNextId(snapshot.nextUnitId);
+    }
+
+    /** Aktiviert den Replay-Modus: keine Callbacks, Kaempfe laufen synchron. */
+    public void beginReplay() {
+        replaying = true;
+    }
+
+    /** Beendet den Replay-Modus. */
+    public void endReplay() {
+        replaying = false;
+    }
+
+    public boolean isReplaying() {
+        return replaying;
+    }
+
+    /** Laeuft gerade ein asynchroner Kampf? */
+    public boolean isCombatRunning() {
+        return combatRunning;
     }
     // AI-GENERATED-END
 
@@ -214,11 +333,14 @@ public class GameEngine implements GameService {
             result = p.toDto(false);
         } // Lock wird hier freigegeben, VOR den Callbacks
 
-        // Callbacks AUSSERHALB des Locks senden, damit Clients getState() aufrufen koennen
-        for (GameListener l : listeners) {
-            try { l.onTurnChanged(turnValue); }
-            catch (Exception e) {
-                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+        // Callbacks AUSSERHALB des Locks senden, damit Clients getState() aufrufen koennen.
+        // Im Replay-Modus (Verzoegerungskompensation) werden sie unterdrueckt.
+        if (!replaying) {
+            for (GameListener l : listeners) {
+                try { l.onTurnChanged(turnValue); }
+                catch (Exception e) {
+                    System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                }
             }
         }
         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
@@ -226,9 +348,15 @@ public class GameEngine implements GameService {
         // Die Clients warten auf die ready()-Antwort. Wenn wir resolveCombat() synchron
         // aufrufen, versuchen die Callbacks (onCombatFrames, onCombatFinished) zurueck
         // zu den Clients zu gehen, die aber noch auf ready() warten -> Deadlock.
+        // Waehrend eines Replays laeuft der Kampf synchron, weil ohnehin keine
+        // Callbacks gesendet werden duerfen (sonst Deadlock-Gefahr wie oben).
         if (bothReady) {
-            Thread combatThread = new Thread(this::resolveCombat, "combat");
-            combatThread.start();
+            if (replaying) {
+                resolveCombat();
+            } else {
+                Thread combatThread = new Thread(this::resolveCombat, "combat");
+                combatThread.start();
+            }
         }
         return result;
     }
@@ -358,10 +486,13 @@ public class GameEngine implements GameService {
                         removeAnywhere(p, c);
                         merged = true;
                         // AI-GENERATED-END
-                        for (GameListener l : listeners) {
-                            try { l.onUnitCombined(p.id, a.name, a.star); }
-                            catch (Exception e) {
-                                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                        // Im Replay-Modus keine Callbacks senden.
+                        if (!replaying) {
+                            for (GameListener l : listeners) {
+                                try { l.onUnitCombined(p.id, a.name, a.star); }
+                                catch (Exception e) {
+                                    System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                                }
                             }
                         }
                         // AI-GENERATED-START: Bestandscode aus Basis-Commit d7ee115 (vor Branch client-server) - 2026-10-29
@@ -393,21 +524,32 @@ public class GameEngine implements GameService {
         } // Lock wird hier freigegeben, VOR den Callbacks
 
         // Callbacks AUSSERHALB des Locks senden
-        for (GameListener l : listeners) {
-            try { l.onRoundStarted(roundNum); }
-            catch (Exception e) {
-                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+        if (!replaying) {
+            for (GameListener l : listeners) {
+                try { l.onRoundStarted(roundNum); }
+                catch (Exception e) {
+                    System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                }
             }
-        }
-        for (GameListener l : listeners) {
-            try { l.onTurnChanged(turnPlayer); }
-            catch (Exception e) {
-                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+            for (GameListener l : listeners) {
+                try { l.onTurnChanged(turnPlayer); }
+                catch (Exception e) {
+                    System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                }
             }
         }
     }
 
     private void resolveCombat() {
+        combatRunning = true;
+        try {
+            resolveCombatInternal();
+        } finally {
+            combatRunning = false;
+        }
+    }
+
+    private void resolveCombatInternal() {
         // Kampf-Simulation und Daten-Updates unter Lock, um Datenrennen zu vermeiden.
         // Callbacks werden AUSSERHALB des Locks gesendet, damit Clients getState() aufrufen
         // koennen, ohne vom Kampf-Thread blockiert zu werden (Deadlock-Vermeidung).
@@ -457,29 +599,34 @@ public class GameEngine implements GameService {
             winner = winnerName;
         } // Lock wird hier freigegeben, VOR den Callbacks
 
-        // Callbacks AUSSERHALB des Locks senden — Clients koennen jetzt getState() aufrufen
-        for (GameListener l : listeners) {
-            try { l.onCombatFrames(round, frames); }
-            catch (Exception e) {
-                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
-            }
-        }
-
-        for (GameListener l : listeners) {
-            try { l.onCombatFinished(result); }
-            catch (Exception e) {
-                System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
-            }
-        }
-
-        if (isGameOver) {
+        // Callbacks AUSSERHALB des Locks senden — Clients koennen jetzt getState() aufrufen.
+        // Im Replay-Modus werden sie unterdrueckt; der Server sendet danach genau
+        // einen onStateRefresh an alle Clients.
+        if (!replaying) {
             for (GameListener l : listeners) {
-                try { l.onGameOver(winner); }
+                try { l.onCombatFrames(round, frames); }
                 catch (Exception e) {
                     System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
                 }
             }
-        } else {
+
+            for (GameListener l : listeners) {
+                try { l.onCombatFinished(result); }
+                catch (Exception e) {
+                    System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                }
+            }
+
+            if (isGameOver) {
+                for (GameListener l : listeners) {
+                    try { l.onGameOver(winner); }
+                    catch (Exception e) {
+                        System.err.println("Listener-Callback fehlgeschlagen: " + e.getMessage());
+                    }
+                }
+            }
+        }
+        if (!isGameOver) {
             // startRound() ist nicht synchronized und sendet Callbacks ebenfalls außerhalb des Locks
             startRound();
         }

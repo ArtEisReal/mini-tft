@@ -164,6 +164,29 @@ public class JmsClient {
     // ---------- Spielbefehle (Client -> Server) ----------
 
     private void sendCommand(String action, int playerId, int... args) throws JMSException {
+        sendCommandInternal(action, playerId, 0L, args);
+    }
+
+    /**
+     * Sendet einen Befehl mit Verzoegerung ueber den ActiveMQ-Scheduler.
+     * Die Vektoruhr wird beim Senden eingefroren; genau dadurch kommt die
+     * Nachricht spaeter mit einem "alten" Tick an und loest die
+     * serverseitige Verzoegerungskompensation aus.
+     */
+    public void sendCommandDelayed(String action, long delayMs, int playerId, int... args) throws JMSException {
+        if (delayMs <= 0) {
+            sendCommandInternal(action, playerId, 0L, args);
+        } else {
+            sendCommandInternal(action, playerId, delayMs, args);
+        }
+    }
+
+    /** Kauft eine Einheit verzoegert (Demo der Delayed Delivery). */
+    public void buyDelayed(int playerId, int slot, long delayMs) throws JMSException {
+        sendCommandDelayed("buy", delayMs, playerId, slot);
+    }
+
+    private void sendCommandInternal(String action, int playerId, long delayMs, int... args) throws JMSException {
         if (closed.get()) throw new java.lang.IllegalStateException("Client ist geschlossen");
 
         // VEKTORUHR: Eigene Uhr inkrementieren und in Nachricht einbetten
@@ -175,16 +198,38 @@ public class JmsClient {
             clockToSend = localClock.clone();
         }
 
-        System.out.println("  [VC-Client] Befehl senden: " + action + " | Uhr: " + clockToSend);
+        System.out.println("  [VC-Client] Befehl senden: " + action
+                + (delayMs > 0 ? " (verzoegert um " + delayMs + " ms)" : "")
+                + " | Uhr: " + clockToSend);
 
         JmsMessage msg = new JmsMessage(clientId, playerId, action, clockToSend, args);
         TextMessage textMessage = session.createTextMessage(msg.toJson());
-        textMessage.setStringProperty("sessionId", sessionId);
+        attachCommandProperties(textMessage, action, playerId, clockToSend, delayMs);
         commandProducer.send(textMessage);
     }
 
     public void buy(int playerId, int slot) throws JMSException {
         sendCommand("buy", playerId, slot);
+    }
+
+    /**
+     * Setzt aussagekraeftige JMS-Properties, damit die ActiveMQ-Web-Konsole
+     * Aktion, Spieler, Vektoruhr und Correlation-ID direkt anzeigen kann.
+     */
+    private void attachCommandProperties(TextMessage textMessage, String action, int playerId,
+                                         VectorClock clock, long delayMs) throws JMSException {
+        String correlationId = UUID.randomUUID().toString();
+        textMessage.setJMSCorrelationID(correlationId);
+        textMessage.setStringProperty("action", action);
+        textMessage.setIntProperty("playerId", playerId);
+        textMessage.setStringProperty("clientId", clientId);
+        textMessage.setStringProperty("sessionId", sessionId);
+        textMessage.setStringProperty("correlationId", correlationId);
+        if (clock != null) textMessage.setStringProperty("vectorClock", clock.toJson());
+        if (delayMs > 0) {
+            // ActiveMQ-Scheduler: Nachricht erst nach delayMs zustellen.
+            textMessage.setLongProperty("AMQ_SCHEDULED_DELAY", delayMs);
+        }
     }
 
     public void sell(int playerId, int index) throws JMSException {
@@ -233,9 +278,13 @@ public class JmsClient {
     public GameStateDto getState(int playerId) throws JMSException, InterruptedException, java.lang.IllegalStateException {
         if (closed.get()) throw new java.lang.IllegalStateException("Client ist geschlossen");
 
-        // Temporäre Queue fuer die Antwort erstellen
+        // Request/Reply: temporaere Queue + Correlation-ID (JMS-Standardmuster).
         TemporaryQueue tempQueue = session.createTemporaryQueue();
-        MessageConsumer tempConsumer = session.createConsumer(tempQueue);
+        String correlationId = UUID.randomUUID().toString();
+
+        // Consumer filtert per Correlation-ID-Selektor auf genau diese Antwort.
+        MessageConsumer tempConsumer = session.createConsumer(tempQueue,
+                "JMSCorrelationID = '" + correlationId + "'");
 
         // Antwort-Container
         final Object[] result = new Object[1];
@@ -267,14 +316,17 @@ public class JmsClient {
             clockToSend = localClock.clone();
         }
 
-        // Request mit Vektoruhr und Reply-Queue senden
+        // Request mit Vektoruhr, JMSReplyTo und JMSCorrelationID senden
         JmsMessage msg = new JmsMessage(clientId, playerId, "getState", clockToSend, new int[]{playerId});
-        // Die Reply-Queue muss als payload (dritter String-Parameter) uebergeben werden
-        // Da commandWithReply die Reply-Queue als payload nutzt, bauen wir die Nachricht manuell:
         TextMessage textMessage = session.createTextMessage(msg.toJson());
-        // Reply-Queue als JMS-Property anhaengen, damit der Server sie findet
-        textMessage.setStringProperty("replyQueue", tempQueue.getQueueName());
+        textMessage.setJMSReplyTo(tempQueue);
+        textMessage.setJMSCorrelationID(correlationId);
+        textMessage.setStringProperty("action", "getState");
+        textMessage.setIntProperty("playerId", playerId);
+        textMessage.setStringProperty("clientId", clientId);
         textMessage.setStringProperty("sessionId", sessionId);
+        textMessage.setStringProperty("correlationId", correlationId);
+        if (clockToSend != null) textMessage.setStringProperty("vectorClock", clockToSend.toJson());
         commandProducer.send(textMessage);
 
         // Auf Antwort warten (Timeout: 5 Sekunden)
@@ -372,6 +424,12 @@ public class JmsClient {
                     SwingUtilities.invokeLater(() -> {
                         try { listener.onGameOver(winner); }
                         catch (Exception e) { System.err.println("Callback onGameOver: " + e.getMessage()); }
+                    });
+                }
+                case "onStateRefresh" -> {
+                    SwingUtilities.invokeLater(() -> {
+                        try { listener.onStateRefresh(); }
+                        catch (Exception e) { System.err.println("Callback onStateRefresh: " + e.getMessage()); }
                     });
                 }
                 case "error" -> {

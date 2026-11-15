@@ -23,7 +23,7 @@ public class SwingJmsMain extends JFrame implements GameListener {
     private static final String[] NAMES = {"Spieler 0", "Spieler 1"};
 
     private final JmsClient client;
-    private final GameService service;
+    private final JmsGameServiceStub service;
     /** Spieler-ID dieses Clients (0 oder 1). */
     private final int playerId;
 
@@ -46,6 +46,7 @@ public class SwingJmsMain extends JFrame implements GameListener {
     private final JPanel shopPanel = new JPanel(new GridLayout(1, GameEngine.SHOP_SIZE, 10, 10));
     private final JTextArea logArea = new JTextArea();
     private final JButton rerollBtn = new JButton("Reroll (" + GameEngine.REROLL_COST + " Gold)");
+    private final JButton delayedBuyBtn = new JButton("Kaufen Slot 1 (" + (JmsConfig.DEMO_DELAY_MS / 1000) + " s verzögert)");
     private final JButton readyBtn = new JButton("Fertig / Kampf starten");
 
     /**
@@ -55,7 +56,7 @@ public class SwingJmsMain extends JFrame implements GameListener {
      * @param service   das GameService-Proxy-Objekt (muss JMS-Befehle weiterleiten)
      * @param playerId  die Spieler-ID (0 oder 1)
      */
-    public SwingJmsMain(JmsClient client, JmsServiceProxy service, int playerId) {
+    public SwingJmsMain(JmsClient client, JmsGameServiceStub service, int playerId) {
         super("Mini-TFT (JMS) - Spieler " + playerId);
         this.client = client;
         this.service = service;
@@ -107,11 +108,15 @@ public class SwingJmsMain extends JFrame implements GameListener {
         areas.add(shopPanel, BorderLayout.SOUTH);
 
         rerollBtn.addActionListener(e -> act(() -> service.reroll(playerId)));
+        delayedBuyBtn.setToolTipText("Demo der Delayed Delivery: Befehl wird beim Broker "
+                + (JmsConfig.DEMO_DELAY_MS / 1000) + " s zurueckgehalten. Danach sofort Reroll klicken.");
+        delayedBuyBtn.addActionListener(e -> actDelayedBuy());
         JButton levelBtn = new JButton("Level up (" + GameEngine.LEVEL_COST + " Gold)");
         levelBtn.setToolTipText("Gibt +1 Platz auf dem Feld (max. Level " + GameEngine.MAX_LEVEL + ")");
         levelBtn.addActionListener(e -> act(() -> service.levelUp(playerId)));
         readyBtn.addActionListener(e -> onReady());
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        buttons.add(delayedBuyBtn);
         buttons.add(rerollBtn);
         buttons.add(levelBtn);
         buttons.add(readyBtn);
@@ -149,8 +154,27 @@ public class SwingJmsMain extends JFrame implements GameListener {
         refresh();
     }
 
-    private void onReady() {
+    /**
+     * Demo: kauft Slot 1 mit Broker-Verzoegerung. Direkt danach sollte der
+     * Benutzer "Reroll" klicken, damit die zweite Nachricht zuerst ankommt.
+     */
+    private void actDelayedBuy() {
+        if (combatPlayback) return;
         msgLabel.setText(" ");
+        try {
+            service.buyDelayed(playerId, 1);
+            logArea.append(">>> Delayed Delivery: buy(Slot 1) mit "
+                    + (JmsConfig.DEMO_DELAY_MS / 1000) + " s Verzoegerung gesendet.\n");
+            logArea.append(">>> Jetzt sofort 'Reroll' klicken, damit die Vektoruhr eine Luecke zeigt.\n");
+        } catch (GameRuleException e) {
+            msgLabel.setText(e.getMessage());
+        } catch (RuntimeException e) {
+            msgLabel.setText("Fehler: " + e.getMessage());
+        }
+        refresh();
+    }
+
+    private void onReady() {        msgLabel.setText(" ");
         try {
             service.ready(playerId);
         } catch (GameRuleException e) {
@@ -190,6 +214,7 @@ public class SwingJmsMain extends JFrame implements GameListener {
         statusLabel.setText(String.format("Runde %d   |   %s: %d HP, %d Gold   |   %s",
                 s.round(), s.self().name(), s.self().hp(), s.self().gold(), turnMsg));
         rerollBtn.setEnabled(myTurn && !s.self().ready());
+        delayedBuyBtn.setEnabled(myTurn && !s.self().ready());
         readyBtn.setEnabled(!s.self().ready());
         boardPanel.setEnabled(myTurn && !s.self().ready());
         shopPanel.setEnabled(myTurn && !s.self().ready());
@@ -278,6 +303,15 @@ public class SwingJmsMain extends JFrame implements GameListener {
         SwingUtilities.invokeLater(() -> logArea.append("*** SPIEL VORBEI - Gewinner: " + winnerName + " ***\n"));
     }
 
+    @Override
+    public void onStateRefresh() {
+        SwingUtilities.invokeLater(() -> {
+            logArea.append("*** [Server] Zustand nach Verzoegerungskompensation aktualisiert. ***\n");
+            logArea.setCaretPosition(logArea.getDocument().getLength());
+            refresh();
+        });
+    }
+
     // ---------- Einheiten-Karte (aus SwingMain uebernommen) ----------
 
     private static class Slot extends JPanel {
@@ -351,99 +385,6 @@ public class SwingJmsMain extends JFrame implements GameListener {
         }
     }
 
-    // ---------- JMS-Proxy: uebersetzt GameService-Aufrufe in JMS-Befehle ----------
-
-    /**
-     * Implementiert GameService und leitet alle Aufrufe an JmsClient weiter.
-     * getState wird asynchron ueber einen Reply-Mechanismus realisiert.
-     */
-    private static class JmsServiceProxy implements GameService {
-        private final JmsClient client;
-
-        JmsServiceProxy(JmsClient client) {
-            this.client = client;
-        }
-
-        @Override
-        public PlayerDto buy(int playerId, int slot) throws GameRuleException {
-            try { client.buy(playerId, slot); } catch (Exception e) { throw new RuntimeException(e); }
-            return null; // asynchron, Ergebnis kommt per Callback
-        }
-
-        @Override
-        public PlayerDto sell(int playerId, int index) throws GameRuleException {
-            try { client.sell(playerId, index); } catch (Exception e) { throw new RuntimeException(e); }
-            return null;
-        }
-
-        @Override
-        public PlayerDto sellBench(int playerId, int slot) throws GameRuleException {
-            try { client.sellBench(playerId, slot); } catch (Exception e) { throw new RuntimeException(e); }
-            return null;
-        }
-
-        @Override
-        public PlayerDto move(int playerId, int index, int row, int col) throws GameRuleException {
-            try { client.move(playerId, index, row, col); } catch (Exception e) { throw new RuntimeException(e); }
-            return null;
-        }
-
-        @Override
-        public PlayerDto toField(int playerId, int benchSlot, int row, int col) throws GameRuleException {
-            try { client.toField(playerId, benchSlot, row, col); } catch (Exception e) { throw new RuntimeException(e); }
-            return null;
-        }
-
-        @Override
-        public PlayerDto toBench(int playerId, int index) throws GameRuleException {
-            try { client.toBench(playerId, index); } catch (Exception e) { throw new RuntimeException(e); }
-            return null;
-        }
-
-        @Override
-        public PlayerDto levelUp(int playerId) throws GameRuleException {
-            try { client.levelUp(playerId); } catch (Exception e) { throw new RuntimeException(e); }
-            return null;
-        }
-
-        @Override
-        public PlayerDto reroll(int playerId) throws GameRuleException {
-            try { client.reroll(playerId); } catch (Exception e) { throw new RuntimeException(e); }
-            return null;
-        }
-
-        @Override
-        public PlayerDto ready(int playerId) throws GameRuleException {
-            try { client.ready(playerId); } catch (Exception e) { throw new RuntimeException(e); }
-            return null;
-        }
-
-        @Override
-        public GameStateDto getState(int playerId) throws GameRuleException {
-            try {
-                return client.getState(playerId);
-            } catch (Exception e) {
-                throw new RuntimeException("Fehler beim Abrufen des Spielstands: " + e.getMessage(), e);
-            }
-        }
-
-        @Override
-        public long ping() { return 0; }
-
-        @Override
-        public String getStateJson(int playerId) throws GameRuleException {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public String executeJson(String commandJson) throws GameRuleException {
-            throw new UnsupportedOperationException();
-        }
-
-        @Override
-        public void addListener(GameListener listener) {}
-    }
-
     // ---------- Main ----------
 
     public static void main(String[] args) {
@@ -467,8 +408,8 @@ public class SwingJmsMain extends JFrame implements GameListener {
                 client.connect();
                 System.out.println("  [VC-Client] Vektoruhr-Index: " + vcIndex + " (Spieler " + playerId + ")");
 
-                // GUI erstellen
-                JmsServiceProxy service = new JmsServiceProxy(client);
+                // GUI erstellen (Stub kapselt die JMS-Kommunikationsschicht)
+                JmsGameServiceStub service = new JmsGameServiceStub(client);
                 SwingJmsMain ui = new SwingJmsMain(client, service, playerId);
 
                 // Listener fuer Callbacks registrieren

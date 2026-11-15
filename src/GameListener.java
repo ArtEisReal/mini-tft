@@ -28,4 +28,11 @@ public interface GameListener {
     void onTurnChanged(int turn);
 
     void onGameOver(String winnerName);
+
+    /**
+     * Der Server hat den Spielzustand nach einer Verzoegerungskompensation
+     * (Rewind + Replay) korrigiert. Clients sollen ihren Zustand neu laden.
+     * Default-Methode, damit bestehende Listener (RMI/lokal) unveraendert bleiben.
+     */
+    default void onStateRefresh() {}
 }
