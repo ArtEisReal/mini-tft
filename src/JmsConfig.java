@@ -3,7 +3,7 @@
  *
  * Einstellungen als System-Property (-D...) oder Env-Variable:
  *
- *   minitft.brokerUrl   JMS-Broker-URL.  Standard: tcp://localhost:61616
+ *   minitft.brokerUrl   JMS-Broker-URL.  Standard: tcp://10.8.3.3:61616
  *                        Env-Alternative: MINITFT_BROKER_URL
  *   minitft.clientId    Client-ID (zur Identifizierung). Standard: auto
  *
@@ -16,8 +16,13 @@
  */
 public final class JmsConfig {
 
-    /** Broker-URL (Default: lokaler ActiveMQ auf Port 61616). */
-    public static final String DEFAULT_BROKER_URL = "tcp://localhost:61616";
+    // AI-GENERATED-START: Broker-IP analog zu SwingMain.DEFAULT_SERVER_HOST (VPN) - 2026-11-16 CET
+    /** IP-Adresse des Rechners, auf dem der ActiveMQ-Broker laeuft (wie im SwingMain-Client). */
+    public static final String DEFAULT_SERVER_HOST = "10.8.3.3";
+
+    /** Broker-URL (Default: ActiveMQ auf dem Server-Rechner, Port 61616). */
+    public static final String DEFAULT_BROKER_URL = "tcp://" + DEFAULT_SERVER_HOST + ":61616";
+    // AI-GENERATED-END
 
     /** Queue fuer Client -> Server Befehle. */
     public static final String COMMAND_QUEUE = "mini-tft/commands";

@@ -15,7 +15,7 @@ import java.util.List;
  *   java -cp out;... SwingJmsMain [SpielerID]
  *
  * SpielerID: 0 oder 1 (Standard: 0).
- * Broker-URL: -Dminitft.brokerUrl=tcp://localhost:61616 (Standard).
+ * Broker-URL: -Dminitft.brokerUrl=tcp://10.8.3.3:61616 (Standard, wie SwingMain).
  */
 public class SwingJmsMain extends JFrame implements GameListener {
 

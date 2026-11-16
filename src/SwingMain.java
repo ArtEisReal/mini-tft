@@ -17,7 +17,7 @@ public class SwingMain extends JFrame implements GameListener {
     /** Eigene IP-Adresse des Client-Rechners. */
     private static final String DEFAULT_CLIENT_HOST = "10.8.3.2";
     /** IP-Adresse des Rechners, auf dem RmiServer läuft. */
-    private static final String DEFAULT_SERVER_HOST = "10.8.3.2";
+    private static final String DEFAULT_SERVER_HOST = "10.8.3.3";
 
     /** Name des Spielers nach ID (Hotseat-Modus). */
     private static final String[] NAMES = {"Spieler 1", "Spieler 2"};
